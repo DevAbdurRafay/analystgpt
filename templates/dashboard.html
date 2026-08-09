@@ -51,7 +51,7 @@
         <!-- so it stops reserving grid space and pushing the right column off-center. -->
         <div id="left-panel" class="{% if not has_dataset %}hidden{% endif %} lg:col-span-4 space-y-6">
 
-            <input type="file" id="fileInput" accept=".csv" class="hidden">
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" class="hidden">
             <!-- Diagnostics Card (Initially Hidden or Placeholder) -->
             <div id="diagnostics-card" class="{% if not has_dataset %}hidden{% endif %} backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4 transition-all">
                 <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
@@ -116,7 +116,7 @@
                                 <input type="checkbox" id="clean-headers" name="header_formatting" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
                                 <div class="text-xs">
                                     <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Normalize Column Headers</span>
-                                    <p class="text-slate-500 mt-0.5">Strips whitespace, converts to lowercase, replaces spaces/hyphens/dots with underscores. E.g. <code class="text-cyan-400 bg-black/30 px-1 rounded">"Order Date"</code> → <code class="text-cyan-400 bg-black/30 px-1 rounded">"order_date"</code></p>
+                                    <p class="text-slate-500 mt-0.5">Converts to <code class="text-cyan-400 bg-black/30 px-1 rounded">snake_case</code>, strips whitespace, replaces spaces/hyphens/dots.</p>
                                 </div>
                             </label>
                             <label class="flex items-start space-x-2.5 cursor-pointer group">
@@ -133,27 +133,76 @@
                                     <p class="text-slate-500 mt-0.5">Removes columns with only 1 unique value (zero information value).</p>
                                 </div>
                             </label>
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-high-card" name="drop_high_cardinality" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Drop High-Cardinality Columns <span class="text-slate-500">(ID detection)</span></span>
+                                    <p class="text-slate-500 mt-0.5">Drops text columns where ≥95% of values are unique — likely ID/hash columns with no analytical value.</p>
+                                </div>
+                            </label>
                         </div>
                     </div>
 
-                    <!-- Section: Type Conversion -->
+                    <!-- Section: Text Formatting -->
                     <div class="space-y-1">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Type Conversion & Parsing</p>
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Text Formatting</p>
+                        <div class="space-y-3 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-slate-400">Text Case Transformation</label>
+                                <select name="text_case" id="text-case-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
+                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
+                                    <option value="none">No Change</option>
+                                    <option value="lowercase">lowercase — all text to lower</option>
+                                    <option value="uppercase">UPPERCASE — all text to upper</option>
+                                    <option value="titlecase">Title Case — Each Word Capitalized</option>
+                                    <option value="sentencecase">Sentence case — First letter only</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-slate-400">Strip Special Characters</label>
+                                <select name="strip_special_chars" id="strip-chars-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
+                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
+                                    <option value="none">No Change</option>
+                                    <option value="punctuation">Remove Punctuation (keep letters, digits, spaces)</option>
+                                    <option value="non_ascii">Remove Non-ASCII Characters</option>
+                                    <option value="digits">Remove Digits from Text Columns</option>
+                                    <option value="extra_spaces">Collapse Extra Whitespace</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section: Type Conversion & Dates -->
+                    <div class="space-y-1">
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Type Conversion & Dates</p>
                         <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
                             <label class="flex items-start space-x-2.5 cursor-pointer group">
                                 <input type="checkbox" id="clean-numeric" name="numeric_parsing" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
                                 <div class="text-xs">
                                     <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Parse Currencies & Percentages</span>
-                                    <p class="text-slate-500 mt-0.5">Converts string numbers like <code class="text-amber-400 bg-black/30 px-1 rounded">"$1,500"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"12%"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"€2.500"</code> into proper numeric floats.</p>
+                                    <p class="text-slate-500 mt-0.5">Converts <code class="text-amber-400 bg-black/30 px-1 rounded">"$1,500"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"12%"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"€2.500"</code> into proper floats.</p>
                                 </div>
                             </label>
                             <label class="flex items-start space-x-2.5 cursor-pointer group">
                                 <input type="checkbox" id="clean-dates" name="parse_dates" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
                                 <div class="text-xs">
                                     <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Auto-Parse Date Columns</span>
-                                    <p class="text-slate-500 mt-0.5">Detects and converts text date columns (e.g. <code class="text-amber-400 bg-black/30 px-1 rounded">"2024-01-15"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"Jan 15, 2024"</code>) to proper datetime. Enables time-intelligence queries.</p>
+                                    <p class="text-slate-500 mt-0.5">Detects and converts text date columns to proper datetime.</p>
                                 </div>
                             </label>
+                            <div class="space-y-1 pt-1">
+                                <label class="text-[10px] font-bold text-slate-400">Date Output Format <span class="text-slate-600">(applied after parsing)</span></label>
+                                <select name="date_format_output" id="date-format-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
+                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
+                                    <option value="">Keep as Datetime Object</option>
+                                    <option value="%Y-%m-%d">YYYY-MM-DD (ISO 8601)</option>
+                                    <option value="%d/%m/%Y">DD/MM/YYYY</option>
+                                    <option value="%m/%d/%Y">MM/DD/YYYY</option>
+                                    <option value="%d-%b-%Y">DD-Mon-YYYY (e.g. 09-Aug-2026)</option>
+                                    <option value="%B %d, %Y">Month DD, YYYY (e.g. August 09, 2026)</option>
+                                    <option value="%Y-%m-%d %H:%M:%S">YYYY-MM-DD HH:MM:SS</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -172,13 +221,47 @@
                                 <input type="checkbox" id="clean-outliers" name="remove_outliers_iqr" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
                                 <div class="text-xs">
                                     <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Remove Extreme Outliers (IQR)</span>
-                                    <p class="text-slate-500 mt-0.5">Removes rows where any numeric value is more than <strong class="text-amber-400">1.5× IQR</strong> beyond Q1/Q3. Improves model accuracy and chart readability.</p>
+                                    <p class="text-slate-500 mt-0.5">Drops rows where any numeric value is >1.5× IQR beyond Q1/Q3.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-cap-outliers" name="cap_outliers_iqr" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Cap Outliers — Winsorize</span>
+                                    <p class="text-slate-500 mt-0.5">Clips extreme outliers to IQR boundary instead of deleting them. Preserves row count.</p>
                                 </div>
                             </label>
                         </div>
                     </div>
 
-                    <!-- Section: Null Handling -->
+                    <!-- Section: Numeric Transformations -->
+                    <div class="space-y-1">
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Numeric Transformations</p>
+                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-standardize" name="standardize_numeric" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Z-Score Standardize <span class="text-slate-500">(mean=0, std=1)</span></span>
+                                    <p class="text-slate-500 mt-0.5">Normalizes numeric columns for ML models. Formula: <code class="text-cyan-400 bg-black/30 px-1 rounded">(x − μ) / σ</code></p>
+                                </div>
+                            </label>
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-minmax" name="minmax_normalize" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Min-Max Normalize <span class="text-slate-500">(range 0–1)</span></span>
+                                    <p class="text-slate-500 mt-0.5">Scales numeric columns to 0–1 range. Formula: <code class="text-cyan-400 bg-black/30 px-1 rounded">(x − min) / (max − min)</code></p>
+                                </div>
+                            </label>
+                            <div class="space-y-1 pt-1">
+                                <label class="text-[10px] font-bold text-slate-400">Round Numeric Values to N Decimals</label>
+                                <input type="number" name="round_numeric" id="round-numeric-input" min="0" max="10" placeholder="e.g. 2  (leave blank = no rounding)"
+                                    style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
+                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan placeholder-slate-600">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section: Missing Value Strategy -->
                     <div class="space-y-2">
                         <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Missing Value Strategy</p>
                         <div class="grid grid-cols-1 gap-2 text-xs">
@@ -200,7 +283,7 @@
                                 <input type="radio" name="null_handling" value="fill_mean" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
                                 <div>
                                     <span class="font-semibold text-slate-200">Fill with Mean / Mode</span>
-                                    <p class="text-slate-500 text-[10px]">Numeric columns → column mean. Text columns → most frequent value.</p>
+                                    <p class="text-slate-500 text-[10px]">Numeric → column mean. Text → most frequent value.</p>
                                 </div>
                             </label>
                             <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
@@ -214,38 +297,87 @@
                                 <input type="radio" name="null_handling" value="fill_zero" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
                                 <div>
                                     <span class="font-semibold text-slate-200">Fill with Zero / "Unknown"</span>
-                                    <p class="text-slate-500 text-[10px]">Numeric → 0. Text → "Unknown". Simple but can distort aggregates.</p>
+                                    <p class="text-slate-500 text-[10px]">Numeric → 0. Text → "Unknown".</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all" id="fill-custom-label">
+                                <input type="radio" name="null_handling" value="fill_custom" id="radio-fill-custom" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0" onchange="toggleCustomFill()">
+                                <div class="flex-1">
+                                    <span class="font-semibold text-slate-200">Fill with Custom Value</span>
+                                    <p class="text-slate-500 text-[10px]">Specify an exact value to fill all nulls (numeric or text).</p>
+                                    <input type="text" name="custom_fill_value" id="custom-fill-input" placeholder="e.g. 0, N/A, Unknown"
+                                        style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
+                                        class="hidden mt-2 w-full rounded px-2 py-1.5 border text-xs focus:outline-none focus:border-cyberCyan placeholder-slate-600">
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="drop_cols_threshold" id="radio-drop-cols-threshold" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0" onchange="toggleNullColThreshold()">
+                                <div class="flex-1">
+                                    <span class="font-semibold text-slate-200">Drop Columns with >N% Nulls</span>
+                                    <p class="text-slate-500 text-[10px]">Removes columns where missing values exceed the threshold percentage.</p>
+                                    <input type="number" name="null_col_threshold" id="null-col-threshold-input" min="1" max="100" value="50" placeholder="% (default 50)"
+                                        style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
+                                        class="hidden mt-2 w-full rounded px-2 py-1.5 border text-xs focus:outline-none focus:border-cyberCyan">
                                 </div>
                             </label>
                             <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
                                 <input type="radio" name="null_handling" value="forward_fill" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
                                 <div>
                                     <span class="font-semibold text-slate-200">Forward Fill <span class="text-amber-400">(Time Series)</span></span>
-                                    <p class="text-slate-500 text-[10px]">Propagates the last valid observation forward. Ideal for time-series data with gaps.</p>
+                                    <p class="text-slate-500 text-[10px]">Propagates the last valid observation forward.</p>
                                 </div>
                             </label>
                             <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
                                 <input type="radio" name="null_handling" value="backward_fill" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
                                 <div>
                                     <span class="font-semibold text-slate-200">Backward Fill</span>
-                                    <p class="text-slate-500 text-[10px]">Uses next valid observation to fill gaps. Alternative for time-series.</p>
+                                    <p class="text-slate-500 text-[10px]">Uses next valid observation to fill gaps.</p>
                                 </div>
                             </label>
                         </div>
                     </div>
 
-                    <button type="button" onclick="runCleaning()" class="w-full py-3 bg-gradient-to-r from-cyberCyan/20 to-neonEmerald/20 border border-cyberCyan/40 hover:border-cyberCyan text-cyberCyan font-bold font-outfit rounded-xl hover:from-cyberCyan/30 hover:to-neonEmerald/30 transition-all flex items-center justify-center space-x-2">
+                    <!-- Section: PII / Data Privacy -->
+                    <div class="space-y-1">
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Privacy & PII Detection</p>
+                        <div class="bg-black/20 rounded-xl p-3 border border-white/[0.04] space-y-1">
+                            <label class="text-[10px] font-bold text-slate-400">Action on Detected Emails, Phones, URLs</label>
+                            <select name="pii_handling" id="pii-handling-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
+                                class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
+                                <option value="none">No Action</option>
+                                <option value="redact">Redact — Replace with [EMAIL] [PHONE] [URL]</option>
+                                <option value="drop_col">Drop Column — Remove entire PII column</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="runCleaning()" id="run-cleaning-btn" class="w-full py-3 bg-gradient-to-r from-cyberCyan/20 to-neonEmerald/20 border border-cyberCyan/40 hover:border-cyberCyan text-cyberCyan font-bold font-outfit rounded-xl hover:from-cyberCyan/30 hover:to-neonEmerald/30 transition-all flex items-center justify-center space-x-2">
                         <i class="fa-solid fa-sparkles"></i>
                         <span>Apply Cleaning Pipeline</span>
                     </button>
                 </form>
+
+                <!-- Download Buttons -->
+                <div class="pt-2 border-t border-white/[0.05] space-y-2">
+                    <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500 pt-1">Download Cleaned Dataset</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="downloadDatasetCSV()" id="dl-csv-btn"
+                            class="py-2.5 px-3 bg-neonEmerald/10 border border-neonEmerald/30 text-neonEmerald font-bold font-outfit text-xs rounded-xl hover:bg-neonEmerald/20 hover:border-neonEmerald/60 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neonEmerald/5">
+                            <i class="fa-solid fa-file-csv"></i>
+                            <span>Download CSV</span>
+                        </button>
+                        <button onclick="downloadDatasetExcel()" id="dl-excel-btn"
+                            class="py-2.5 px-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold font-outfit text-xs rounded-xl hover:bg-amber-500/20 hover:border-amber-500/60 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/5">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span>Download XLSX</span>
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-slate-600 text-center">Files saved as <span class="text-slate-500 font-mono">AnalystGPT_Cleaned_Dataset_YYYYMMDD_HHMMSS</span></p>
+                </div>
             </div>
         </div>
 
         <!-- Right Side: Workbench Dashboard View -->
-        <!-- FIX: full width (col-span-12) when no dataset is loaded, so the dropzone -->
-        <!-- sits dead-center of the page instead of being squeezed to the right. -->
-        <!-- Becomes col-span-8 again as soon as a dataset is loaded (see JS below). -->
         <div id="right-panel" class="{% if not has_dataset %}lg:col-span-12{% else %}lg:col-span-8{% endif %} space-y-6">
 
             <!-- Single Centered Hero Upload Box (shown when no dataset is loaded) --><div id="no-dataset-card" class="{% if has_dataset %}hidden{% endif %} flex-1 flex flex-col items-start justify-center w-full min-h-[10vh] py-0">
@@ -260,7 +392,7 @@
 
         <!-- Text -->
         <div class="max-w-sm space-y-1.5 mb-5">
-            <h3 class="font-outfit font-bold text-xl text-white">Drag &amp; Drop your CSV here</h3>
+            <h3 class="font-outfit font-bold text-xl text-white">Drag & Drop your CSV/XLSX here</h3>
             <p class="text-sm text-slate-400">or click to browse files &mdash; <span class="text-slate-500">Max 50MB</span></p>
             <p class="text-xs text-slate-500 mt-1">Once uploaded, AnalystGPT generates summary metrics, builds a data grid, and activates the AI Copilot.</p>
         </div>
@@ -383,16 +515,7 @@
                             </div>
                             <div class="bg-white/[0.02] border border-white/[0.05] rounded-xl p-3.5 text-slate-300 leading-relaxed max-w-[85%]">
                                 <p class="font-semibold text-white mb-2">👋 Welcome to AnalystGPT — Your AI Data Scientist!</p>
-                                <p class="text-xs text-slate-400 mb-2">I can answer <strong class="text-white">any</strong> question about your dataset. Try asking:</p>
-                                <ul class="list-none space-y-1.5 text-xs text-slate-400">
-                                    <li>💡 <em>"What are the top 5 best-selling products?"</em></li>
-                                    <li>📅 <em>"Compare sales vs previous month / quarter / year"</em></li>
-                                    <li>📊 <em>"Plot a multi-colored horizontal bar chart of sales by category"</em></li>
-                                    <li>🔥 <em>"Show a correlation heatmap of all numeric columns"</em></li>
-                                    <li>📈 <em>"Calculate YoY growth % for each product"</em></li>
-                                    <li>🧮 <em>"Write the DAX formula for previous month revenue"</em></li>
-                                    <li>🔍 <em>"Find outliers in the price column"</em></li>
-                                </ul>
+                                <p class="text-xs text-slate-400 mb-2">I can answer <strong class="text-white">any</strong> question about your dataset.</p>
                             </div>
                         </div>
                     </div>
@@ -411,28 +534,63 @@
                                 class="absolute right-3.5 bottom-3.5 w-9 h-9 rounded-xl bg-gradient-to-tr from-cyberCyan to-neonEmerald border-0 flex items-center justify-center text-darkBg shadow hover:brightness-110 transition-all focus:outline-none">
                             <i class="fa-solid fa-paper-plane text-darkBg"></i>
                         </button>
-                    </div>
-                </div>
-
-                <!-- Report Section / Notes & Export -->
+                        <!-- Report Section: AI-Powered PDF Export -->
                 <div class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
                     <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
                         <i class="fa-solid fa-file-pdf text-red-400"></i>
-                        Export Executive Report
+                        AI-Powered Analytical PDF Report
                     </h3>
-                    <div class="space-y-4">
-                        <div class="space-y-2">
-                            <label for="report-notes" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Executive Summary Notes (Included in PDF)</label>
-                            <textarea id="report-notes" rows="4" placeholder="Enter notes or observations here..."
-                                      class="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-y"></textarea>
-                        </div>
 
-                        <button onclick="downloadReport()" id="export-pdf-btn"
-                                class="w-full py-3 bg-red-500/10 border border-red-500/30 text-red-400 font-bold font-outfit rounded-xl hover:bg-red-500/20 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-red-500/5">
-                            <i class="fa-solid fa-download"></i>
-                            <span>Generate & Download PDF Report</span>
-                        </button>
+                    <!-- AI Report Prompt -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">Ask AI to Build Your Report</label>
+                        <div class="relative">
+                            <textarea id="ai-report-prompt" rows="3"
+                                placeholder="e.g. 'Generate a professional analytical report with key insights, executive summary, sales trends, top products, and regional breakdown charts'"
+                                class="w-full pl-4 pr-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-y"></textarea>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button onclick="setReportPrompt('Generate a complete executive summary with KPI highlights, data quality overview, top insights, and trend analysis with professional charts.')" 
+                                class="text-[10px] px-2 py-1 rounded-lg bg-cyberCyan/10 text-cyberCyan border border-cyberCyan/20 hover:bg-cyberCyan/20 transition-all cursor-pointer">Executive Summary</button>
+                            <button onclick="setReportPrompt('Create a sales analysis report with revenue breakdown by category, top 10 products, monthly trend charts, regional performance heatmap, and growth recommendations.')" 
+                                class="text-[10px] px-2 py-1 rounded-lg bg-neonEmerald/10 text-neonEmerald border border-neonEmerald/20 hover:bg-neonEmerald/20 transition-all cursor-pointer">Sales Analysis</button>
+                            <button onclick="setReportPrompt('Build a data quality audit report showing column completeness, outlier distribution, missing value analysis, duplicate detection results, and data cleaning recommendations.')" 
+                                class="text-[10px] px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer">Data Quality Audit</button>
+                            <button onclick="setReportPrompt('Generate a statistical analysis report with correlation matrix, distribution plots for numeric columns, descriptive statistics table, and anomaly detection summary.')" 
+                                class="text-[10px] px-2 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-all cursor-pointer">Statistical Analysis</button>
+                        </div>
                     </div>
+
+                    <!-- Generate AI Insights button -->
+                    <button onclick="generateAIReport()" id="gen-ai-report-btn"
+                        class="w-full py-2.5 bg-gradient-to-r from-purple-600/20 to-cyberCyan/20 border border-purple-500/40 text-purple-300 font-bold font-outfit text-sm rounded-xl hover:from-purple-600/30 hover:to-cyberCyan/30 hover:border-purple-400/60 transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-robot"></i>
+                        <span>Generate AI Insights for Report</span>
+                    </button>
+
+                    <!-- AI Insights Preview (hidden until generated) -->
+                    <div id="ai-report-insights" class="hidden bg-black/30 border border-white/[0.06] rounded-xl p-3 space-y-2">
+                        <p class="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-check text-neonEmerald"></i> AI Insights Generated
+                        </p>
+                        <div id="ai-insights-text" class="text-xs text-slate-300 leading-relaxed max-h-[120px] overflow-y-auto"></div>
+                    </div>
+
+                    <!-- Executive Notes -->
+                    <div class="space-y-2">
+                        <label for="report-notes" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Additional Executive Notes</label>
+                        <textarea id="report-notes" rows="3" placeholder="Enter supplementary notes or observations..."
+                                  class="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-y"></textarea>
+                    </div>
+
+                    <!-- Export PDF button -->
+                    <button onclick="downloadReport()" id="export-pdf-btn"
+                            class="w-full py-3 bg-red-500/10 border border-red-500/30 text-red-400 font-bold font-outfit rounded-xl hover:bg-red-500/20 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-red-500/5">
+                        <i class="fa-solid fa-download"></i>
+                        <span>Generate & Download PDF Report</span>
+                    </button>
+                </div>
+              </div>
                 </div>
 
             </div>
@@ -536,10 +694,11 @@
         }
     }
 
-    // CSV Upload Call
+    // File Upload (CSV, XLSX, XLS)
     function uploadCSVFile(file) {
-        if (!file.name.endsWith('.csv')) {
-            alert("Only CSV files are supported.");
+        const nameLower = file.name.toLowerCase();
+        if (!nameLower.endsWith('.csv') && !nameLower.endsWith('.xlsx') && !nameLower.endsWith('.xls')) {
+            alert("Only CSV and Excel (.xlsx, .xls) files are supported.");
             return;
         }
 
@@ -670,16 +829,34 @@
         const formEl = document.getElementById('cleaning-form');
         const formData = new FormData(formEl);
 
+        const btn = document.getElementById('run-cleaning-btn');
+        if (btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Cleaning...</span>'; btn.disabled = true; }
+
+        // Round numeric — only include if filled
+        const roundVal = formData.get('round_numeric');
+        const dateFormatVal = formData.get('date_format_output') || '';
+
         const payload = {
             header_formatting: formData.get('header_formatting') === 'on',
+            trim_whitespace: formData.get('trim_whitespace') === 'on',
+            drop_constant_cols: formData.get('drop_constant_cols') === 'on',
+            drop_high_cardinality: formData.get('drop_high_cardinality') === 'on',
+            text_case: formData.get('text_case') || 'none',
+            strip_special_chars: formData.get('strip_special_chars') || 'none',
             numeric_parsing: formData.get('numeric_parsing') === 'on',
             parse_dates: formData.get('parse_dates') === 'on',
+            date_format_output: dateFormatVal,
             remove_duplicates: formData.get('remove_duplicates') === 'on',
             remove_outliers_iqr: formData.get('remove_outliers_iqr') === 'on',
-            drop_constant_cols: formData.get('drop_constant_cols') === 'on',
-            trim_whitespace: formData.get('trim_whitespace') === 'on',
-            null_handling: formData.get('null_handling')
+            cap_outliers_iqr: formData.get('cap_outliers_iqr') === 'on',
+            standardize_numeric: formData.get('standardize_numeric') === 'on',
+            minmax_normalize: formData.get('minmax_normalize') === 'on',
+            null_handling: formData.get('null_handling') || 'none',
+            custom_fill_value: formData.get('custom_fill_value') || null,
+            null_col_threshold: formData.get('null_col_threshold') || 50,
+            pii_handling: formData.get('pii_handling') || 'none',
         };
+        if (roundVal !== null && roundVal !== '') payload.round_numeric = parseInt(roundVal);
 
         fetch("{{ url_for('data.clean') }}", {
             method: 'POST',
@@ -688,6 +865,7 @@
         })
         .then(res => res.json())
         .then(data => {
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> <span>Apply Cleaning Pipeline</span>'; btn.disabled = false; }
             if(data.error) {
                 alert("Error cleaning data: " + data.error);
             } else {
@@ -697,8 +875,123 @@
             }
         })
         .catch(err => {
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> <span>Apply Cleaning Pipeline</span>'; btn.disabled = false; }
             console.error(err);
             alert("Failed to reach server for cleaning.");
+        });
+    }
+
+    // Toggle custom fill input visibility
+    function toggleCustomFill() {
+        const input = document.getElementById('custom-fill-input');
+        if (input) input.classList.remove('hidden');
+    }
+    // Also hide custom fill when other radios are selected
+    document.addEventListener('change', function(e) {
+        if (e.target.name === 'null_handling' && e.target.value !== 'fill_custom') {
+            const el = document.getElementById('custom-fill-input');
+            if (el) el.classList.add('hidden');
+        }
+        if (e.target.name === 'null_handling' && e.target.value !== 'drop_cols_threshold') {
+            const el = document.getElementById('null-col-threshold-input');
+            if (el) el.classList.add('hidden');
+        }
+    });
+
+    function toggleNullColThreshold() {
+        const input = document.getElementById('null-col-threshold-input');
+        if (input) input.classList.remove('hidden');
+    }
+
+    // ── Download CSV ──────────────────────────────────────────────────────────
+    function downloadDatasetCSV() {
+        if (!activeDatasetLoaded) { alert('No active dataset to download.'); return; }
+        const btn = document.getElementById('dl-csv-btn');
+        if (btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Preparing...'; btn.disabled = true; }
+        window.location.href = "{{ url_for('data.export_csv') }}";
+        setTimeout(() => {
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-file-csv"></i> <span>Download CSV</span>'; btn.disabled = false; }
+        }, 2000);
+    }
+
+    // ── Download XLSX ─────────────────────────────────────────────────────────
+    function downloadDatasetExcel() {
+        if (!activeDatasetLoaded) { alert('No active dataset to download.'); return; }
+        const btn = document.getElementById('dl-excel-btn');
+        if (btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Preparing...'; btn.disabled = true; }
+        window.location.href = "{{ url_for('data.export_excel') }}";
+        setTimeout(() => {
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-file-excel"></i> <span>Download XLSX</span>'; btn.disabled = false; }
+        }, 2000);
+    }
+
+    // ── AI Report Quick Prompts ───────────────────────────────────────────────
+    function setReportPrompt(text) {
+        const el = document.getElementById('ai-report-prompt');
+        if (el) { el.value = text; el.focus(); }
+    }
+
+    // ── Generate AI Insights for Report ──────────────────────────────────────
+    function generateAIReport() {
+        if (!activeDatasetLoaded) { alert('Please upload a dataset first.'); return; }
+        const prompt = (document.getElementById('ai-report-prompt')?.value || '').trim();
+        if (!prompt) { alert('Please enter a report description or select a quick template above.'); return; }
+
+        const btn = document.getElementById('gen-ai-report-btn');
+        if (btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Generating AI Insights...</span>'; btn.disabled = true; }
+
+        // Build an enriched AI query for report generation
+        const reportQuery = `You are generating content for a professional PDF analytical report. 
+Task: ${prompt}
+
+Please provide:
+1. A concise executive summary (2-3 sentences)
+2. Key findings and insights from the dataset
+3. Recommendations or actionable next steps
+4. Any important caveats about data quality
+
+Format your response with clear sections using **bold** headers. Be professional, data-driven, and concise.`;
+
+        fetch("{{ url_for('ai.query') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({query: reportQuery})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-robot"></i> <span>Generate AI Insights for Report</span>'; btn.disabled = false; }
+            if (data.error) {
+                alert('AI report error: ' + data.error);
+                return;
+            }
+            // Show insights panel
+            const insightsDiv = document.getElementById('ai-report-insights');
+            const insightsText = document.getElementById('ai-insights-text');
+            const answer = data.answer || '';
+            const formattedAnswer = answer
+                .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`([^`]+)`/g, '<code class="bg-black/40 px-1 rounded font-mono text-cyan-400 text-[10px]">$1</code>')
+                .replace(/\n/g, '<br/>');
+            insightsText.innerHTML = formattedAnswer;
+            insightsDiv.classList.remove('hidden');
+
+            // Store insights in notes as well
+            const notesEl = document.getElementById('report-notes');
+            if (notesEl && !notesEl.value) {
+                notesEl.value = answer.replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '');
+            }
+
+            // Also add to chat history so it appears in PDF
+            chatHistory.push({sender: 'user', text: `Report Request: ${prompt}`});
+            chatHistory.push({sender: 'ai', text: answer});
+
+            showSuccessNotification('AI insights generated — ready to include in PDF report!');
+        })
+        .catch(err => {
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-robot"></i> <span>Generate AI Insights for Report</span>'; btn.disabled = false; }
+            console.error(err);
+            alert('Failed to generate AI insights.');
         });
     }
 

@@ -188,6 +188,70 @@ def remove_dataset():
     
     return jsonify({"success": True})
 
+
+# ─── CSV Export ────────────────────────────────────────────────────────────────
+@data_bp.route("/export-csv", methods=["GET"])
+def export_csv():
+    if "email" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    dataset_path = get_dataset_path()
+    if not dataset_path or not os.path.exists(dataset_path):
+        return jsonify({"error": "No active dataset found."}), 400
+
+    try:
+        df = pd.read_csv(dataset_path)
+        buf = BytesIO()
+        df.to_csv(buf, index=False, encoding="utf-8-sig")
+        buf.seek(0)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"AnalystGPT_Cleaned_Dataset_{ts}.csv"
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="text/csv"
+        )
+    except Exception as e:
+        return jsonify({"error": f"CSV export failed: {str(e)}"}), 500
+
+
+# ─── Excel Export ──────────────────────────────────────────────────────────────
+@data_bp.route("/export-excel", methods=["GET"])
+def export_excel():
+    if "email" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    dataset_path = get_dataset_path()
+    if not dataset_path or not os.path.exists(dataset_path):
+        return jsonify({"error": "No active dataset found."}), 400
+
+    try:
+        df = pd.read_csv(dataset_path)
+        buf = BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Cleaned_Dataset")
+            # Auto-fit column widths
+            ws = writer.sheets["Cleaned_Dataset"]
+            for col_cells in ws.columns:
+                max_len = max(
+                    (len(str(cell.value)) if cell.value is not None else 0)
+                    for cell in col_cells
+                )
+                ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 3, 50)
+        buf.seek(0)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"AnalystGPT_Cleaned_Dataset_{ts}.xlsx"
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        return jsonify({"error": f"Excel export failed: {str(e)}"}), 500
+
+
 @data_bp.route("/export-pdf", methods=["POST"])
 def export_pdf():
     if "email" not in session:
