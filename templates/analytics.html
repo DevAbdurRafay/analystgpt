@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - AnalystGPT{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto py-10 px-4">
+    <div class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 shadow-2xl">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <p class="text-sm uppercase tracking-[0.3em] text-cyberCyan">Analytics</p>
+                <h1 class="text-3xl font-outfit font-semibold text-white">Explore your data workspace</h1>
+            </div>
+            <a href="{{ url_for('dashboard_page') }}" class="text-sm font-semibold text-cyberCyan hover:underline">Back to dashboard</a>
+        </div>
+        <p class="text-slate-400">The analytics experience is ready to render from the main Flask app routes.</p>
+    </div>
+</div>
+{% endblock %}

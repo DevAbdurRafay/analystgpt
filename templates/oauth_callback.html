@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Signing you in… – AnalystGPT{% endblock %}
+
+{% block content %}
+<div id="oauth-callback-page" class="min-h-[80vh] flex flex-col items-center justify-center gap-6 text-center px-4">
+    <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-cyberCyan to-neonEmerald flex items-center justify-center shadow-xl shadow-cyberCyan/20 animate-pulse">
+        <i class="fa-solid fa-bolt text-4xl text-darkBg"></i>
+    </div>
+    <div>
+        <h1 class="font-outfit font-bold text-2xl sm:text-3xl text-white mb-2">Completing sign-in…</h1>
+        <p id="status-msg" class="text-slate-400 text-sm">Verifying your Google account. Please wait.</p>
+    </div>
+    <div class="flex gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-cyberCyan animate-bounce" style="animation-delay:0ms"></span>
+        <span class="w-2 h-2 rounded-full bg-cyberCyan animate-bounce" style="animation-delay:150ms"></span>
+        <span class="w-2 h-2 rounded-full bg-cyberCyan animate-bounce" style="animation-delay:300ms"></span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* ──────────────────────────────────────────────────────────────────────────
+   OAuth Callback Handler
+   ──────────────────────────────────────────────────────────────────────────
+   Supabase can return tokens in two ways:
+     • Implicit flow  → #access_token=... in the URL fragment
+     • PKCE / code    → ?code=... query param, client exchanges automatically
+
+   In BOTH cases the Supabase JS client fires onAuthStateChange('SIGNED_IN').
+   The golden rule: subscribe to that event FIRST — before any async calls —
+   so we never miss the event.
+────────────────────────────────────────────────────────────────────────── */
+(function () {
+    'use strict';
+
+    const statusEl = document.getElementById('status-msg');
+    let resolved   = false;
+
+    /* ── helpers ── */
+    function setStatus(msg) {
+        if (statusEl) statusEl.textContent = msg;
+    }
+
+    function done(redirectPath) {
+        if (resolved) return;
+        resolved = true;
+        setStatus('Success! Redirecting to your dashboard…');
+        window.location.replace(redirectPath || '/dashboard');
+    }
+
+    function fail(reason) {
+        if (resolved) return;
+        resolved = true;
+        console.error('[OAuth Callback] failed:', reason);
+        setStatus('Sign-in failed. Redirecting to login…');
+        setTimeout(() => window.location.replace('/login'), 2500);
+    }
+
+    /* ── POST email to Flask so it sets session['email'] ── */
+    async function syncAndRedirect(user) {
+        if (resolved) return;
+        const email    = user.email || '';
+        const provider = user.app_metadata?.provider || 'oauth';
+
+        if (!email || !email.includes('@')) {
+            fail('No email returned from provider — ensure email scope is enabled in Supabase dashboard.');
+            return;
+        }
+
+        setStatus('Establishing your session…');
+        try {
+            const resp = await fetch('/auth/session-sync', {
+                method:      'POST',
+                headers:     { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body:        JSON.stringify({ email, provider })
+            });
+            const json = await resp.json().catch(() => ({}));
+            if (resp.ok && json.ok) {
+                done(json.redirect);
+            } else {
+                fail(json.error || `session-sync HTTP ${resp.status}`);
+            }
+        } catch (err) {
+            fail(err);
+        }
+    }
+
+    /* ── main ── */
+    function init() {
+        const auth = window.supabase?.auth;
+
+        if (!auth) {
+            fail('Supabase client is not initialised. Check SUPABASE_URL / SUPABASE_ANON_KEY in your .env');
+            return;
+        }
+
+        /* ── 1. Subscribe IMMEDIATELY (before any await) ── */
+        let sub;
+        try {
+            const { data } = auth.onAuthStateChange((event, session) => {
+                console.log('[OAuth] onAuthStateChange:', event, session?.user?.email);
+                if (resolved) return;
+                if (event === 'SIGNED_IN' && session?.user) {
+                    sub?.unsubscribe();
+                    syncAndRedirect(session.user);
+                }
+            });
+            sub = data?.subscription;
+        } catch (e) {
+            console.warn('[OAuth] onAuthStateChange error:', e);
+        }
+
+        /* ── 2. Eagerly check — may already have a session (page refresh) ── */
+        auth.getSession().then(({ data: sd, error }) => {
+            console.log('[OAuth] getSession:', sd?.session?.user?.email, error?.message);
+            if (!resolved && sd?.session?.user) {
+                sub?.unsubscribe();
+                syncAndRedirect(sd.session.user);
+            }
+        }).catch(console.warn);
+
+        /* ── 3. Handle raw implicit fragment (#access_token=...) as last resort ── */
+        const fragment = Object.fromEntries(
+            (window.location.hash.replace(/^#/, '').split('&'))
+                .filter(Boolean)
+                .map(p => { const [k, ...v] = p.split('='); return [decodeURIComponent(k), decodeURIComponent(v.join('='))]; })
+        );
+        if (fragment.access_token && !resolved) {
+            console.log('[OAuth] Found raw access_token in fragment, calling setSession…');
+            auth.setSession({ access_token: fragment.access_token, refresh_token: fragment.refresh_token || '' })
+                .then(({ data: sd, error }) => {
+                    if (!resolved && sd?.user) {
+                        sub?.unsubscribe();
+                        syncAndRedirect(sd.user);
+                    } else if (error) {
+                        console.warn('[OAuth] setSession error:', error.message);
+                    }
+                }).catch(console.warn);
+        }
+
+        /* ── 4. Bail out after 15 s ── */
+        setTimeout(() => {
+            if (!resolved) {
+                sub?.unsubscribe();
+                fail('Timed out waiting for Supabase SIGNED_IN event (15 s)');
+            }
+        }, 15000);
+    }
+
+    /* Run as soon as DOM is ready */
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+</script>
+{% endblock %}

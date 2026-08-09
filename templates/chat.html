@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}AI Chat - AnalystGPT{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto py-10 px-4">
+    <div class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 shadow-2xl">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <p class="text-sm uppercase tracking-[0.3em] text-neonEmerald">AI Chat</p>
+                <h1 class="text-3xl font-outfit font-semibold text-white">Ask questions about your dataset</h1>
+            </div>
+            <a href="{{ url_for('dashboard_page') }}" class="text-sm font-semibold text-neonEmerald hover:underline">Back to dashboard</a>
+        </div>
+        <p class="text-slate-400">The chat experience is now routed directly through the Flask app and will render normally.</p>
+    </div>
+</div>
+{% endblock %}

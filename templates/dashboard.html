@@ -1,0 +1,1136 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AnalystGPT{% endblock %}
+
+{% block extra_head %}
+<!-- Plotly.js CDN -->
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+    /* Custom Scrollbar for Glass panels */
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(6, 182, 212, 0.3);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="app-state" data-has-dataset="{{ 'true' if has_dataset else 'false' }}" class="hidden"></div>
+<div class="space-y-6">
+
+    <!-- Top Grid: Greeting and Stats Summary -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/[0.05] pb-4">
+        <div>
+            <h1 class="font-outfit font-bold text-3xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Data Analysis Workbench</h1>
+            <p class="text-sm text-slate-400">Upload your dataset, perform automated cleaning, and ask AI for visual insights.</p>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-cyberCyan/10 border border-cyberCyan/20 text-cyberCyan flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-cyberCyan animate-ping"></span>
+                System Operational
+            </span>
+        </div>
+    </div>
+
+    <!-- Main Workspace Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Side: Controls (Upload, Diagnostics, Cleaning) (lg:col-span-4) -->
+        <!-- FIX: this whole column is now hidden (not just its children) when no dataset is loaded, -->
+        <!-- so it stops reserving grid space and pushing the right column off-center. -->
+        <div id="left-panel" class="{% if not has_dataset %}hidden{% endif %} lg:col-span-4 space-y-6">
+
+            <input type="file" id="fileInput" accept=".csv" class="hidden">
+            <!-- Diagnostics Card (Initially Hidden or Placeholder) -->
+            <div id="diagnostics-card" class="{% if not has_dataset %}hidden{% endif %} backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4 transition-all">
+                <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-neonEmerald"></i>
+                    Dataset Diagnostics
+                </h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white/[0.02] border border-white/[0.05] p-3 rounded-xl">
+                        <p class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Rows</p>
+                        <p id="diag-rows" class="text-xl font-bold font-outfit text-white mt-1">{{ diagnostics['row_count'] if diagnostics else '0' }}</p>
+                    </div>
+                    <div class="bg-white/[0.02] border border-white/[0.05] p-3 rounded-xl">
+                        <p class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Columns</p>
+                        <p id="diag-cols" class="text-xl font-bold font-outfit text-white mt-1">{{ diagnostics['col_count'] if diagnostics else '0' }}</p>
+                    </div>
+                    <div class="bg-white/[0.02] border border-white/[0.05] p-3 rounded-xl col-span-2">
+                        <p class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Missing Values</p>
+                        <p id="diag-nulls" class="text-lg font-bold font-outfit text-amber-400 mt-1">
+                            {% if diagnostics %}
+                                {{ diagnostics['null_counts'].values() | sum }}
+                            {% else %}
+                                0
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Columns list scroll box -->
+                <div class="space-y-2">
+                    <p class="text-xs font-semibold text-slate-400">Column Schema Detail:</p>
+                    <div id="diag-columns-list" class="max-h-[180px] overflow-y-auto border border-white/[0.05] rounded-xl bg-black/20 divide-y divide-white/[0.03]">
+                        {% if diagnostics %}
+                            {% for col in diagnostics['columns'] %}
+                            <div class="p-2.5 flex justify-between items-center text-xs">
+                                <span class="font-mono text-slate-300 truncate max-w-[140px]" title="{{ col }}">{{ col }}</span>
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-400 font-mono text-[10px]">{{ diagnostics['dtypes'][col] }}</span>
+                                    {% if diagnostics['null_counts'][col] > 0 %}
+                                    <span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px]">{{ diagnostics['null_counts'][col] }} nulls</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cleaning Actions Card -->
+            <div id="cleaning-card" class="{% if not has_dataset %}hidden{% endif %} backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4 transition-all">
+                <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-cyberCyan"></i>
+                    Advanced Data Cleaning
+                </h3>
+                <form id="cleaning-form" class="space-y-4">
+
+                    <!-- Section: Column Operations -->
+                    <div class="space-y-1">
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Column & Header Operations</p>
+                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-headers" name="header_formatting" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Normalize Column Headers</span>
+                                    <p class="text-slate-500 mt-0.5">Strips whitespace, converts to lowercase, replaces spaces/hyphens/dots with underscores. E.g. <code class="text-cyan-400 bg-black/30 px-1 rounded">"Order Date"</code> → <code class="text-cyan-400 bg-black/30 px-1 rounded">"order_date"</code></p>
+                                </div>
+                            </label>
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-trim" name="trim_whitespace" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Trim Cell Whitespace</span>
+                                    <p class="text-slate-500 mt-0.5">Strips leading/trailing spaces from all text columns.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-constant" name="drop_constant_cols" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Drop Constant / Empty Columns</span>
+                                    <p class="text-slate-500 mt-0.5">Removes columns with only 1 unique value (zero information value).</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Section: Type Conversion -->
+                    <div class="space-y-1">
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Type Conversion & Parsing</p>
+                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-numeric" name="numeric_parsing" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Parse Currencies & Percentages</span>
+                                    <p class="text-slate-500 mt-0.5">Converts string numbers like <code class="text-amber-400 bg-black/30 px-1 rounded">"$1,500"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"12%"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"€2.500"</code> into proper numeric floats.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-dates" name="parse_dates" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Auto-Parse Date Columns</span>
+                                    <p class="text-slate-500 mt-0.5">Detects and converts text date columns (e.g. <code class="text-amber-400 bg-black/30 px-1 rounded">"2024-01-15"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"Jan 15, 2024"</code>) to proper datetime. Enables time-intelligence queries.</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Section: Deduplication & Outliers -->
+                    <div class="space-y-1">
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Records & Outliers</p>
+                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-duplicates" name="remove_duplicates" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Remove Duplicate Rows</span>
+                                    <p class="text-slate-500 mt-0.5">Drops rows that are completely identical across all columns.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-start space-x-2.5 cursor-pointer group">
+                                <input type="checkbox" id="clean-outliers" name="remove_outliers_iqr" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
+                                <div class="text-xs">
+                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Remove Extreme Outliers (IQR)</span>
+                                    <p class="text-slate-500 mt-0.5">Removes rows where any numeric value is more than <strong class="text-amber-400">1.5× IQR</strong> beyond Q1/Q3. Improves model accuracy and chart readability.</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Section: Null Handling -->
+                    <div class="space-y-2">
+                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Missing Value Strategy</p>
+                        <div class="grid grid-cols-1 gap-2 text-xs">
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="none" checked class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
+                                <div>
+                                    <span class="font-semibold text-slate-200">No Change</span>
+                                    <p class="text-slate-500 text-[10px]">Leave all missing values as-is (NaN).</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="drop" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
+                                <div>
+                                    <span class="font-semibold text-slate-200">Drop Rows with Nulls</span>
+                                    <p class="text-slate-500 text-[10px]">Removes any row that contains at least one missing value.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="fill_mean" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
+                                <div>
+                                    <span class="font-semibold text-slate-200">Fill with Mean / Mode</span>
+                                    <p class="text-slate-500 text-[10px]">Numeric columns → column mean. Text columns → most frequent value.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="fill_median" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
+                                <div>
+                                    <span class="font-semibold text-slate-200">Fill with Median / Mode</span>
+                                    <p class="text-slate-500 text-[10px]">Robust to outliers. Numeric → median. Text → mode.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="fill_zero" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
+                                <div>
+                                    <span class="font-semibold text-slate-200">Fill with Zero / "Unknown"</span>
+                                    <p class="text-slate-500 text-[10px]">Numeric → 0. Text → "Unknown". Simple but can distort aggregates.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="forward_fill" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
+                                <div>
+                                    <span class="font-semibold text-slate-200">Forward Fill <span class="text-amber-400">(Time Series)</span></span>
+                                    <p class="text-slate-500 text-[10px]">Propagates the last valid observation forward. Ideal for time-series data with gaps.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
+                                <input type="radio" name="null_handling" value="backward_fill" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
+                                <div>
+                                    <span class="font-semibold text-slate-200">Backward Fill</span>
+                                    <p class="text-slate-500 text-[10px]">Uses next valid observation to fill gaps. Alternative for time-series.</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="runCleaning()" class="w-full py-3 bg-gradient-to-r from-cyberCyan/20 to-neonEmerald/20 border border-cyberCyan/40 hover:border-cyberCyan text-cyberCyan font-bold font-outfit rounded-xl hover:from-cyberCyan/30 hover:to-neonEmerald/30 transition-all flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-sparkles"></i>
+                        <span>Apply Cleaning Pipeline</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Right Side: Workbench Dashboard View -->
+        <!-- FIX: full width (col-span-12) when no dataset is loaded, so the dropzone -->
+        <!-- sits dead-center of the page instead of being squeezed to the right. -->
+        <!-- Becomes col-span-8 again as soon as a dataset is loaded (see JS below). -->
+        <div id="right-panel" class="{% if not has_dataset %}lg:col-span-12{% else %}lg:col-span-8{% endif %} space-y-6">
+
+            <!-- Single Centered Hero Upload Box (shown when no dataset is loaded) --><div id="no-dataset-card" class="{% if has_dataset %}hidden{% endif %} flex-1 flex flex-col items-start justify-center w-full min-h-[10vh] py-0">
+            
+        <div id="dropzone-container" class="w-full max-w-3xl mx-auto backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl shadow-xl flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-300">
+        <!-- Hero Drag & Drop Zone -->
+        <div id="dropzone" class="w-full h-full flex-1 flex flex-col items-center justify-center border-2 border-dashed border-white/[0.08] hover:border-cyberCyan/50 rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-300 bg-transparent group min-h-[26vh]">
+        <!-- Upload Icon -->
+        <div class="w-14 h-14 mb-4 rounded-2xl bg-cyberCyan/10 border border-cyberCyan/20 flex items-center justify-center text-cyberCyan text-3xl shadow-xl shadow-cyberCyan/10 group-hover:scale-105 group-hover:shadow-cyberCyan/25 transition-all duration-300" id="upload-icon-container">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+        </div>
+
+        <!-- Text -->
+        <div class="max-w-sm space-y-1.5 mb-5">
+            <h3 class="font-outfit font-bold text-xl text-white">Drag &amp; Drop your CSV here</h3>
+            <p class="text-sm text-slate-400">or click to browse files &mdash; <span class="text-slate-500">Max 50MB</span></p>
+            <p class="text-xs text-slate-500 mt-1">Once uploaded, AnalystGPT generates summary metrics, builds a data grid, and activates the AI Copilot.</p>
+        </div>
+
+        <!-- Browse Files Button -->
+        <button onclick="document.getElementById('fileInput').click(); event.stopPropagation();"
+                class="py-2 px-7 bg-gradient-to-r from-cyberCyan to-neonEmerald border-0 text-[#05070c] font-bold font-outfit text-sm rounded-xl hover:brightness-110 shadow-lg shadow-cyberCyan/20 transition-all flex items-center gap-2">
+            <i class="fa-solid fa-folder-open"></i>
+            <span>Browse Files</span>
+        </button>
+    </div>
+</div>
+        </div>
+
+            <!-- Active Workbench Panels (Visible when CSV is loaded) -->
+            <div id="workbench-panels" class="{% if not has_dataset %}hidden{% endif %} space-y-6">
+
+                <!-- Dataset Management Actions -->
+                <div class="flex">
+                    <button onclick="removeDataset()" class="w-full py-3 flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 text-sm font-bold text-red-400 hover:bg-red-500/20 transition-all">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Remove Dataset</span>
+                    </button>
+                </div>
+                <!-- Upload Progress -->
+                <div id="progressContainer" class="hidden space-y-2">
+                    <div class="flex justify-between text-xs font-semibold text-slate-400">
+                        <span>Uploading...</span>
+                        <span id="progressText">0%</span>
+                    </div>
+                    <div class="w-full bg-white/[0.05] rounded-full h-1.5 overflow-hidden">
+                        <div id="progressBar" class="bg-gradient-to-r from-cyberCyan to-neonEmerald h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Data Preview spreadsheet Card -->
+                <div class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
+                            <i class="fa-solid fa-table text-cyberCyan"></i>
+                            Spreadsheet Preview
+                        </h3>
+                        <span class="text-xs text-slate-500">Showing first 10 rows</span>
+                    </div>
+
+                    <div class="overflow-x-auto border border-white/[0.05] rounded-xl bg-black/15 max-h-[300px]">
+                        <table class="w-full text-left border-collapse text-xs" id="preview-table">
+                            <thead>
+                                <tr class="bg-white/[0.03] text-slate-400 font-semibold border-b border-white/[0.05]">
+                                    {% if diagnostics %}
+                                        {% for col in diagnostics['columns'] %}
+                                        <th class="p-3 font-mono truncate max-w-[150px]">{{ col }}</th>
+                                        {% endfor %}
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/[0.03]">
+                                {% if diagnostics %}
+                                    {% for row in diagnostics['preview'] %}
+                                    <tr class="hover:bg-white/[0.01]">
+                                        {% for col in diagnostics['columns'] %}
+                                        <td class="p-3 text-slate-300 font-mono truncate max-w-[150px]" title="{{ row[col] }}">
+                                            {{ 'None' if row[col] == None else row[col] }}
+                                        </td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Plotly Visualizations Card -->
+                <div id="chart-card" class="hidden backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                            <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
+                                <i class="fa-solid fa-chart-simple text-neonEmerald"></i>
+                                <span id="chart-display-title">Visual Analytics</span>
+                            </h3>
+                        </div>
+                        <!-- Override chart controls -->
+                        <div class="flex items-center space-x-2 text-xs">
+                            <label for="chart-override" class="text-slate-400 font-semibold">Type:</label>
+                            <select id="chart-override" onchange="overrideChartType()" 
+                                style="background-color:#0f172a; color:#e2e8f0; border-color:rgba(255,255,255,0.15);"
+                                class="rounded-lg px-2.5 py-1.5 border focus:outline-none focus:border-cyberCyan text-sm">
+                                <option value="bar" style="background:#0f172a">Bar</option>
+                                <option value="line" style="background:#0f172a">Line</option>
+                                <option value="pie" style="background:#0f172a">Pie</option>
+                                <option value="scatter" style="background:#0f172a">Scatter</option>
+                                <option value="histogram" style="background:#0f172a">Histogram</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Rendering Canvas -->
+                    <div class="bg-black/25 rounded-xl border border-white/[0.05] p-3 w-full overflow-hidden flex items-center justify-center min-h-[300px]">
+                        <!-- Plotly interactive chart -->
+                        <div id="plotly-canvas" class="w-full h-[380px]"></div>
+                        <!-- Matplotlib/Seaborn static image -->
+                        <img id="chart-image-canvas" src="" alt="Chart" class="hidden max-w-full rounded-xl" style="max-height:420px;">
+                    </div>
+                </div>
+
+                <!-- AI Copilot Chat Card -->
+                <div class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
+                    <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
+                        <i class="fa-solid fa-robot text-cyberCyan"></i>
+                        AI Assistant
+                    </h3>
+
+                    <!-- Message Feed -->
+                    <div id="chat-messages" class="space-y-4 max-h-[350px] overflow-y-auto border border-white/[0.05] rounded-xl bg-black/20 p-4 min-h-[120px]">
+                        <!-- Welcome message -->
+                        <div class="flex items-start space-x-3 text-sm">
+                            <div class="w-7 h-7 rounded-lg bg-cyberCyan/15 flex items-center justify-center text-cyberCyan flex-shrink-0">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div class="bg-white/[0.02] border border-white/[0.05] rounded-xl p-3.5 text-slate-300 leading-relaxed max-w-[85%]">
+                                <p class="font-semibold text-white mb-2">👋 Welcome to AnalystGPT — Your AI Data Scientist!</p>
+                                <p class="text-xs text-slate-400 mb-2">I can answer <strong class="text-white">any</strong> question about your dataset. Try asking:</p>
+                                <ul class="list-none space-y-1.5 text-xs text-slate-400">
+                                    <li>💡 <em>"What are the top 5 best-selling products?"</em></li>
+                                    <li>📅 <em>"Compare sales vs previous month / quarter / year"</em></li>
+                                    <li>📊 <em>"Plot a multi-colored horizontal bar chart of sales by category"</em></li>
+                                    <li>🔥 <em>"Show a correlation heatmap of all numeric columns"</em></li>
+                                    <li>📈 <em>"Calculate YoY growth % for each product"</em></li>
+                                    <li>🧮 <em>"Write the DAX formula for previous month revenue"</em></li>
+                                    <li>🔍 <em>"Find outliers in the price column"</em></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                <!-- Message Input Form -->
+                    <div class="relative">
+                        <textarea id="chatInput" rows="2" placeholder="Ask a question about the dataset..."
+                                  class="w-full pl-4 pr-24 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-none"></textarea>
+                        <!-- Stop button (hidden when idle) -->
+                        <button onclick="stopChatMessage()" id="stop-chat-btn"
+                                class="hidden absolute right-14 bottom-3.5 w-9 h-9 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 hover:bg-red-500/30 transition-all focus:outline-none"
+                                title="Stop response">
+                            <i class="fa-solid fa-stop text-xs"></i>
+                        </button>
+                        <button onclick="sendChatMessage()" id="send-chat-btn"
+                                class="absolute right-3.5 bottom-3.5 w-9 h-9 rounded-xl bg-gradient-to-tr from-cyberCyan to-neonEmerald border-0 flex items-center justify-center text-darkBg shadow hover:brightness-110 transition-all focus:outline-none">
+                            <i class="fa-solid fa-paper-plane text-darkBg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Report Section / Notes & Export -->
+                <div class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
+                    <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
+                        <i class="fa-solid fa-file-pdf text-red-400"></i>
+                        Export Executive Report
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="space-y-2">
+                            <label for="report-notes" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Executive Summary Notes (Included in PDF)</label>
+                            <textarea id="report-notes" rows="4" placeholder="Enter notes or observations here..."
+                                      class="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-y"></textarea>
+                        </div>
+
+                        <button onclick="downloadReport()" id="export-pdf-btn"
+                                class="w-full py-3 bg-red-500/10 border border-red-500/30 text-red-400 font-bold font-outfit rounded-xl hover:bg-red-500/20 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-red-500/5">
+                            <i class="fa-solid fa-download"></i>
+                            <span>Generate & Download PDF Report</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Global variable state
+    const stateElement = document.getElementById('app-state');
+    let activeDatasetLoaded = stateElement?.getAttribute('data-has-dataset') === 'true';
+    let activeChartData = null;      // Stores current Plotly data object from AI
+    let activeChartImageBase64 = null; // Decoded canvas snapshot
+    let chatHistory = [];            // Log of user and AI messages
+
+    // Drag and Drop triggers
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+
+    if(dropzone) {
+        dropzone.addEventListener('click', () => fileInput.click());
+    }
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        document.body.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        document.body.addEventListener(eventName, (e) => {
+            if(dropzone && !activeDatasetLoaded) {
+                const container = document.getElementById('dropzone-container');
+                if (container) {
+                    container.classList.add('scale-[1.02]', 'shadow-2xl', 'shadow-cyberCyan/20', 'border-cyberCyan/50');
+                }
+                dropzone.classList.add('border-cyberCyan', 'bg-cyberCyan/5');
+            }
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        document.body.addEventListener(eventName, (e) => {
+            if(dropzone) {
+                const container = document.getElementById('dropzone-container');
+                if (container) {
+                    container.classList.remove('scale-[1.02]', 'shadow-2xl', 'shadow-cyberCyan/20', 'border-cyberCyan/50');
+                }
+                dropzone.classList.remove('border-cyberCyan', 'bg-cyberCyan/5');
+            }
+        }, false);
+    });
+
+    document.body.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length > 0) {
+            uploadCSVFile(files[0]);
+        }
+    });
+
+    if(fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            if(e.target.files.length > 0) {
+                uploadCSVFile(e.target.files[0]);
+            }
+        });
+    }
+
+    // Chat Enter Key Listener
+    const chatInputEl = document.getElementById('chatInput');
+    if (chatInputEl) {
+        chatInputEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+    }
+
+    // Helper: switch the grid layout between "no dataset" (full width) and "dataset loaded" (4/8 split)
+    function setWorkbenchLayout(hasDataset) {
+        const leftPanel = document.getElementById('left-panel');
+        const rightPanel = document.getElementById('right-panel');
+        if (!leftPanel || !rightPanel) return;
+
+        if (hasDataset) {
+            leftPanel.classList.remove('hidden');
+            rightPanel.classList.remove('lg:col-span-12');
+            rightPanel.classList.add('lg:col-span-8');
+        } else {
+            leftPanel.classList.add('hidden');
+            rightPanel.classList.remove('lg:col-span-8');
+            rightPanel.classList.add('lg:col-span-12');
+        }
+    }
+
+    // CSV Upload Call
+    function uploadCSVFile(file) {
+        if (!file.name.endsWith('.csv')) {
+            alert("Only CSV files are supported.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const iconContainer = document.getElementById('upload-icon-container');
+
+        progressContainer.classList.remove('hidden');
+        iconContainer.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-cyberCyan text-2xl"></i>';
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', "{{ url_for('data.upload') }}", true);
+
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = percentComplete + '%';
+                progressText.innerText = percentComplete + '%';
+            }
+        };
+
+        xhr.onload = function() {
+            progressContainer.classList.add('hidden');
+            progressBar.style.width = '0%';
+            progressText.innerText = '0%';
+            iconContainer.innerHTML = '<i class="fa-solid fa-file-csv text-2xl"></i>';
+
+            if (xhr.status === 200) {
+                const res = JSON.parse(xhr.responseText);
+                // Refresh dashboard components
+                renderDiagnostics(res.diagnostics);
+                renderSpreadsheet(res.diagnostics);
+
+                // Show panels, hide placeholder
+                document.getElementById('no-dataset-card').classList.add('hidden');
+                document.getElementById('workbench-panels').classList.remove('hidden');
+                document.getElementById('diagnostics-card').classList.remove('hidden');
+                document.getElementById('cleaning-card').classList.remove('hidden');
+
+                // Restore the 4/8 column split now that a dataset exists
+                setWorkbenchLayout(true);
+
+                activeDatasetLoaded = true;
+
+                // Alert Toast
+                showSuccessNotification("Dataset uploaded and parsed successfully!");
+            } else {
+                try {
+                    const err = JSON.parse(xhr.responseText);
+                    alert("Error: " + err.error);
+                } catch(e) {
+                    alert("Upload failed. Status code: " + xhr.status);
+                }
+            }
+        };
+
+        xhr.send(formData);
+    }
+
+    // Diagnostics Rendering
+    function renderDiagnostics(diag) {
+        document.getElementById('diag-rows').innerText = diag.row_count;
+        document.getElementById('diag-cols').innerText = diag.col_count;
+
+        // Sum nulls
+        let sumNulls = 0;
+        for (let col in diag.null_counts) {
+            sumNulls += diag.null_counts[col];
+        }
+        document.getElementById('diag-nulls').innerText = sumNulls;
+
+        // Render lists
+        const listDiv = document.getElementById('diag-columns-list');
+        listDiv.innerHTML = '';
+        diag.columns.forEach(col => {
+            const dtype = diag.dtypes[col] || '';
+            const nulls = diag.null_counts[col] || 0;
+
+            let nullBadge = '';
+            if (nulls > 0) {
+                nullBadge = `<span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px]">${nulls} nulls</span>`;
+            }
+
+            const item = document.createElement('div');
+            item.className = "p-2.5 flex justify-between items-center text-xs";
+            item.innerHTML = `
+                <span class="font-mono text-slate-300 truncate max-w-[140px]" title="${col}">${col}</span>
+                <div class="flex items-center space-x-2">
+                    <span class="px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-400 font-mono text-[10px]">${dtype}</span>
+                    ${nullBadge}
+                </div>
+            `;
+            listDiv.appendChild(item);
+        });
+    }
+
+    // Render Preview spreadsheet
+    function renderSpreadsheet(diag) {
+        const table = document.getElementById('preview-table');
+
+        // Headers
+        let headHtml = '<tr class="bg-white/[0.03] text-slate-400 font-semibold border-b border-white/[0.05]">';
+        diag.columns.forEach(col => {
+            headHtml += `<th class="p-3 font-mono truncate max-w-[150px]">${col}</th>`;
+        });
+        headHtml += '</tr>';
+        table.querySelector('thead').innerHTML = headHtml;
+
+        // Body
+        let bodyHtml = '';
+        diag.preview.forEach(row => {
+            bodyHtml += '<tr class="hover:bg-white/[0.01]">';
+            diag.columns.forEach(col => {
+                const cellVal = row[col] === null ? 'None' : row[col];
+                bodyHtml += `<td class="p-3 text-slate-300 font-mono truncate max-w-[150px]" title="${cellVal}">${cellVal}</td>`;
+            });
+            bodyHtml += '</tr>';
+        });
+        table.querySelector('tbody').innerHTML = bodyHtml;
+    }
+
+    // Run Cleaning Pipeline
+    function runCleaning() {
+        const formEl = document.getElementById('cleaning-form');
+        const formData = new FormData(formEl);
+
+        const payload = {
+            header_formatting: formData.get('header_formatting') === 'on',
+            numeric_parsing: formData.get('numeric_parsing') === 'on',
+            parse_dates: formData.get('parse_dates') === 'on',
+            remove_duplicates: formData.get('remove_duplicates') === 'on',
+            remove_outliers_iqr: formData.get('remove_outliers_iqr') === 'on',
+            drop_constant_cols: formData.get('drop_constant_cols') === 'on',
+            trim_whitespace: formData.get('trim_whitespace') === 'on',
+            null_handling: formData.get('null_handling')
+        };
+
+        fetch("{{ url_for('data.clean') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.error) {
+                alert("Error cleaning data: " + data.error);
+            } else {
+                renderDiagnostics(data.diagnostics);
+                renderSpreadsheet(data.diagnostics);
+                showSuccessNotification("Dataset cleaned and updated!");
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Failed to reach server for cleaning.");
+        });
+    }
+
+    // Remove Dataset
+    function removeDataset() {
+        if(!confirm("Are you sure you want to remove the current dataset?")) return;
+
+        fetch("{{ url_for('data.remove_dataset') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                // Reset UI
+                document.getElementById('workbench-panels').classList.add('hidden');
+                document.getElementById('diagnostics-card').classList.add('hidden');
+                document.getElementById('cleaning-card').classList.add('hidden');
+                document.getElementById('no-dataset-card').classList.remove('hidden');
+
+                // Go back to full-width centered dropzone layout
+                setWorkbenchLayout(false);
+
+                activeDatasetLoaded = false;
+
+                // clear chat history and active chart
+                chatHistory = [];
+                activeChartData = null;
+                activeChartImageBase64 = null;
+                document.getElementById('chat-messages').innerHTML = `
+                    <div class="flex items-start space-x-3 text-sm">
+                        <div class="w-7 h-7 rounded-lg bg-cyberCyan/15 flex items-center justify-center text-cyberCyan flex-shrink-0">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div class="bg-white/[0.02] border border-white/[0.05] rounded-xl p-3.5 text-slate-300 leading-relaxed max-w-[85%]">
+                            <p>Welcome! I've loaded your dataset. You can ask me analytical questions like:</p>
+                            <ul class="list-disc pl-5 mt-2 space-y-1 text-xs text-slate-400">
+                                <li>"Summarize this dataset."</li>
+                                <li>"Show a bar chart of the sales by category."</li>
+                                <li>"Plot a scatter chart of price vs cost."</li>
+                                <li>"Find the highest correlation between numeric columns."</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('chart-card').classList.add('hidden');
+
+                showSuccessNotification("Dataset removed successfully.");
+            } else {
+                alert(data.error || "Failed to remove dataset");
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Failed to reach server to remove dataset.");
+        });
+    }
+
+    // AbortController for cancellable chat requests
+    let currentChatAbortController = null;
+
+    // Chat Controller
+    function sendChatMessage() {
+        const input = document.getElementById('chatInput');
+        const queryText = input.value.trim();
+        if(!queryText) return;
+
+        input.value = '';
+
+        // Show stop button, disable send button
+        document.getElementById('stop-chat-btn').classList.remove('hidden');
+        document.getElementById('send-chat-btn').disabled = true;
+        document.getElementById('send-chat-btn').classList.add('opacity-50');
+
+        // Add user bubble
+        appendChatBubble('user', queryText);
+        chatHistory.push({sender: 'user', text: queryText});
+
+        // Add thinking bubble
+        const thinkingId = appendThinkingBubble();
+
+        // Create a fresh AbortController for this request
+        currentChatAbortController = new AbortController();
+        const signal = currentChatAbortController.signal;
+
+        fetch("{{ url_for('ai.query') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({query: queryText}),
+            signal: signal
+        })
+        .then(res => res.json())
+        .then(data => {
+            removeThinkingBubble(thinkingId);
+            resetChatControls();
+
+            if(data.error) {
+                appendChatBubble('ai', `### API Error\nAn error occurred while compiling AI outputs:\n\`${data.error}\``);
+            } else {
+                appendChatBubble('ai', data.answer);
+                chatHistory.push({sender: 'ai', text: data.answer});
+
+                const plotlyCanvas = document.getElementById('plotly-canvas');
+                const imageCanvas = document.getElementById('chart-image-canvas');
+
+                // Handle matplotlib/seaborn image chart
+                if (data.chart_image_base64) {
+                    activeChartData = data;
+                    document.getElementById('chart-card').classList.remove('hidden');
+                    document.getElementById('chart-display-title').innerText = data.chart_title || 'Visual Analytics';
+                    plotlyCanvas.classList.add('hidden');
+                    imageCanvas.src = data.chart_image_base64;
+                    imageCanvas.classList.remove('hidden');
+                }
+                // Handle Plotly interactive chart
+                else if (data.chart_type && data.chart_data) {
+                    activeChartData = data;
+                    document.getElementById('chart-card').classList.remove('hidden');
+                    imageCanvas.classList.add('hidden');
+                    plotlyCanvas.classList.remove('hidden');
+                    document.getElementById('chart-override').value = data.chart_type;
+                    drawPlotlyChart(data.chart_type, data.chart_title, data.chart_data);
+                }
+            }
+        })
+        .catch(err => {
+            removeThinkingBubble(thinkingId);
+            resetChatControls();
+            if (err.name === 'AbortError') {
+                appendChatBubble('ai', '_Response stopped by user._');
+            } else {
+                appendChatBubble('ai', '### Server Unreachable\nCould not reach the analytical helper server.');
+            }
+        });
+    }
+
+    function stopChatMessage() {
+        if (currentChatAbortController) {
+            currentChatAbortController.abort();
+            currentChatAbortController = null;
+        }
+    }
+
+    function resetChatControls() {
+        currentChatAbortController = null;
+        document.getElementById('stop-chat-btn').classList.add('hidden');
+        document.getElementById('send-chat-btn').disabled = false;
+        document.getElementById('send-chat-btn').classList.remove('opacity-50');
+    }
+
+    function appendChatBubble(sender, text) {
+        const feed = document.getElementById('chat-messages');
+        const bubble = document.createElement('div');
+        bubble.className = "flex items-start space-x-3 text-sm";
+
+        let icon = '';
+        let contentBg = '';
+
+        if (sender === 'user') {
+            icon = '<div class="w-7 h-7 rounded-lg bg-cyberCyan/20 flex items-center justify-center text-cyberCyan flex-shrink-0 font-semibold"><i class="fa-solid fa-user text-xs"></i></div>';
+            contentBg = 'bg-cyberCyan/10 border border-cyberCyan/20 text-white';
+        } else {
+            icon = '<div class="w-7 h-7 rounded-lg bg-cyberCyan/15 flex items-center justify-center text-cyberCyan flex-shrink-0"><i class="fa-solid fa-robot"></i></div>';
+            contentBg = 'bg-white/[0.02] border border-white/[0.05] text-slate-300';
+        }
+
+        // Extremely simple Markdown-to-HTML parser (replaces backticks, asterisks, bullet points)
+        let formattedText = text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code class="bg-black/40 px-1.5 py-0.5 rounded font-mono text-cyan-400 text-xs">$1</code>')
+            .replace(/\n/g, '<br/>');
+
+        bubble.innerHTML = `
+            ${icon}
+            <div class="${contentBg} rounded-xl p-3.5 leading-relaxed max-w-[85%]">
+                ${formattedText}
+            </div>
+        `;
+        feed.appendChild(bubble);
+        feed.scrollTop = feed.scrollHeight;
+    }
+
+    function appendThinkingBubble() {
+        const feed = document.getElementById('chat-messages');
+        const bubble = document.createElement('div');
+        const uniqueId = 'thinking-' + Date.now();
+        bubble.id = uniqueId;
+        bubble.className = "flex items-start space-x-3 text-sm animate-pulse";
+        bubble.innerHTML = `
+            <div class="w-7 h-7 rounded-lg bg-cyberCyan/15 flex items-center justify-center text-cyberCyan flex-shrink-0"><i class="fa-solid fa-spinner fa-spin"></i></div>
+            <div class="bg-white/[0.02] border border-white/[0.05] rounded-xl p-3.5 text-slate-500 max-w-[85%]">
+                Computing insights & building data models...
+            </div>
+        `;
+        feed.appendChild(bubble);
+        feed.scrollTop = feed.scrollHeight;
+        return uniqueId;
+    }
+
+    function removeThinkingBubble(id) {
+        const el = document.getElementById(id);
+        if(el) el.remove();
+    }
+
+    // Charting Engine via Plotly.js
+    function drawPlotlyChart(type, title, data) {
+        const gd = document.getElementById('plotly-canvas');
+        const chartTitle = title || 'Data Analysis';
+        document.getElementById('chart-display-title').innerText = chartTitle;
+
+        const DEFAULT_COLORS = ['#06B6D4','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#F97316','#14B8A6','#A78BFA','#FB7185'];
+        const barColors = (data.colors && data.colors.length > 0) ? data.colors : DEFAULT_COLORS;
+        const isHorizontal = data.orientation === 'h';
+
+        // Determine axis labels based on chart type
+        let xLabel = '';
+        let yLabel = '';
+        if (type === 'bar') {
+            xLabel = isHorizontal ? (data.x_label || 'Value') : (data.x_label || 'Category');
+            yLabel = isHorizontal ? (data.y_label || 'Category') : (data.y_label || 'Value');
+        } else if (type === 'line') {
+            xLabel = data.x_label || 'Time / Period';
+            yLabel = data.y_label || 'Value';
+        } else if (type === 'scatter') {
+            xLabel = data.x_label || 'X';
+            yLabel = data.y_label || 'Y';
+        } else if (type === 'histogram') {
+            xLabel = data.x_label || 'Value';
+            yLabel = data.y_label || 'Count';
+        }
+
+        let traces = [];
+        let layout = {
+            title: {
+                text: chartTitle,
+                font: { color: 'rgba(226,232,240,0.7)', size: 13, family: 'Outfit' },
+                x: 0.02, xanchor: 'left',
+                pad: { t: 0 }
+            },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: '#E2E8F0', family: 'Inter' },
+            margin: { t: 50, r: 20, b: isHorizontal ? 60 : 90, l: isHorizontal ? 160 : 70 },
+            xaxis: {
+                gridcolor: 'rgba(255,255,255,0.05)',
+                tickcolor: 'rgba(255,255,255,0.1)',
+                title: { text: xLabel, font: { color: '#94A3B8', size: 11 }, standoff: 10 }
+            },
+            yaxis: {
+                gridcolor: 'rgba(255,255,255,0.05)',
+                tickcolor: 'rgba(255,255,255,0.1)',
+                title: { text: yLabel, font: { color: '#94A3B8', size: 11 }, standoff: 10 }
+            },
+            colorway: DEFAULT_COLORS
+        };
+
+        if (type === 'bar') {
+            const assignedColors = (data.labels || []).map((_, i) => barColors[i % barColors.length]);
+            traces.push({
+                x: isHorizontal ? data.values : data.labels,
+                y: isHorizontal ? data.labels : data.values,
+                type: 'bar',
+                orientation: isHorizontal ? 'h' : 'v',
+                marker: { color: assignedColors, opacity: 0.85 }
+            });
+        } else if (type === 'line') {
+            traces.push({
+                x: data.labels || data.x,
+                y: data.values || data.y,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#10B981', width: 3 },
+                marker: { color: '#06B6D4', size: 6 }
+            });
+        } else if (type === 'pie') {
+            traces.push({
+                labels: data.labels,
+                values: data.values,
+                type: 'pie',
+                hole: 0.4,
+                textinfo: 'percent+label',
+                marker: { colors: barColors }
+            });
+            delete layout.xaxis;
+            delete layout.yaxis;
+        } else if (type === 'scatter') {
+            traces.push({
+                x: data.x,
+                y: data.y,
+                mode: 'markers',
+                type: 'scatter',
+                marker: {
+                    color: data.colors || '#10B981',
+                    size: 8,
+                    opacity: 0.75,
+                    line: { color: '#10B981', width: 1 }
+                }
+            });
+        } else if (type === 'histogram') {
+            traces.push({
+                x: data.values || data.x,
+                type: 'histogram',
+                marker: { color: '#8B5CF6', opacity: 0.8 }
+            });
+        } else if (type === 'heatmap_plotly') {
+            traces.push({
+                z: data.z,
+                x: data.x,
+                y: data.y,
+                type: 'heatmap',
+                colorscale: data.colorscale || 'RdYlGn',
+                showscale: true
+            });
+            layout.margin.b = 120;
+            layout.margin.l = 120;
+            delete layout.xaxis.title;
+            delete layout.yaxis.title;
+        }
+
+        Plotly.newPlot(gd, traces, layout, {responsive: true, displayModeBar: false}).then(function(gd_instance) {
+            Plotly.toImage(gd_instance, {format: 'png', width: 750, height: 420}).then(function(dataUrl) {
+                activeChartImageBase64 = dataUrl;
+            });
+        });
+    }
+
+    // Chart type manual override dropdown selection
+    function overrideChartType() {
+        if (!activeChartData || !activeChartData.chart_data) return;
+        const selectedType = document.getElementById('chart-override').value;
+        drawPlotlyChart(selectedType, activeChartData.chart_title, activeChartData.chart_data);
+    }
+
+    // PDF Report Generator
+    function downloadReport() {
+        if (!activeDatasetLoaded) {
+            alert("No active dataset to generate report for.");
+            return;
+        }
+
+        const notes = document.getElementById('report-notes').value;
+        const btn = document.getElementById('export-pdf-btn');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Compiling PDF Report...</span>';
+        btn.disabled = true;
+
+        const payload = {
+            notes: notes,
+            chat_history: chatHistory,
+            charts: []
+        };
+
+        // Add active chart image if exists
+        if (activeChartImageBase64) {
+            payload.charts.push({
+                title: document.getElementById('chart-display-title').innerText,
+                image: activeChartImageBase64,
+                explanation: chatHistory.length > 0 ? chatHistory[chatHistory.length - 1].text : ''
+            });
+        }
+
+        fetch("{{ url_for('data.export_pdf') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (res.status === 200) {
+                return res.blob();
+            } else {
+                throw new Error("PDF Compilation failed");
+            }
+        })
+        .then(blob => {
+            // Initiate file download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            // Generate filename with timestamp
+            a.download = `Analytical_Report_${new Date().toISOString().slice(0,10)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            btn.innerHTML = '<i class="fa-solid fa-download"></i> <span>Generate & Download PDF Report</span>';
+            btn.disabled = false;
+            showSuccessNotification("PDF Report exported successfully!");
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Failed to download PDF. Review console logs.");
+            btn.innerHTML = '<i class="fa-solid fa-download"></i> <span>Generate & Download PDF Report</span>';
+            btn.disabled = false;
+        });
+    }
+
+    // Toast Alert notification helper
+    function showSuccessNotification(msg) {
+        // Look for existing toast container or build one
+        let container = document.querySelector('.toast-container');
+        if(!container) {
+            container = document.createElement('div');
+            container.className = "toast-container position-fixed";
+            container.style.zIndex = "99999";
+            container.style.top = "20px";
+            container.style.right = "20px";
+            document.body.appendChild(container);
+        }
+
+        const toastHtml = `
+            <div class="toast align-items-center bg-success text-white border-0 shadow-lg show" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fa-solid fa-circle-check me-2"></i>
+                        ${msg}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        const temp = document.createElement('div');
+        temp.innerHTML = toastHtml.trim();
+        const toastEl = temp.firstChild;
+        container.appendChild(toastEl);
+
+        const bToast = new bootstrap.Toast(toastEl, {delay: 5000});
+        bToast.show();
+
+        setTimeout(() => {
+            toastEl.remove();
+        }, 5500);
+    }
+</script>
+{% endblock %}
