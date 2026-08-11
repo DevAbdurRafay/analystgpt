@@ -1,6 +1,9 @@
 # Local dev requirements — NOT installed on Vercel (see requirements-vercel.txt)
 requirements.txt
 
+# Legacy serverless entry — use app.py via Flask preset instead
+api/
+
 # Local virtual environments (never deploy these)
 venv/
 .venv/
