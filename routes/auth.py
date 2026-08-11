@@ -35,10 +35,11 @@ def _mark_otp_pending(purpose: str, email: str, **extra) -> None:
     session.modified = True
 
 
-def _verify_email_context(otp_error: str | None = None) -> dict:
+def _verify_email_context(otp_error: str | None = None, otp_success: str | None = None) -> dict:
     return {
         "otp_email": session.get("otp_target_email"),
         "otp_error": otp_error,
+        "otp_success": otp_success,
         "otp_expiry_minutes": OTP_EXPIRY_MINUTES,
         "hide_auth_flashes": True,
     }
@@ -351,8 +352,29 @@ def verify_email():
     if not _has_pending_email_otp():
         return redirect(url_for("auth.login"))
     otp_error = session.pop("otp_error", None)
+    otp_success = session.pop("otp_success", None)
     session.modified = True
-    return render_template("verify_email.html", **_verify_email_context(otp_error))
+    return render_template("verify_email.html", **_verify_email_context(otp_error, otp_success))
+
+
+@auth_bp.route("/resend-otp", methods=["POST"])
+def resend_otp():
+    """Send a fresh verification code to the user's email."""
+    if not _has_pending_email_otp():
+        flash("Verification session expired. Please try again.", "danger")
+        return redirect(url_for("auth.login"))
+
+    email = session.get("otp_target_email")
+    purpose = session.get("otp_purpose")
+    if not email or purpose not in EMAIL_OTP_PURPOSES:
+        flash("Verification session expired. Please try again.", "danger")
+        return redirect(url_for("auth.login"))
+
+    otp_code = db_service.create_otp(email, purpose)
+    email_service.send_otp(email, otp_code, purpose)
+    session["otp_success"] = f"A new verification code has been sent to {email}."
+    session.modified = True
+    return redirect(url_for("auth.verify_email"))
 
 
 @auth_bp.route("/cancel-verification", methods=["GET"])

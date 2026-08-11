@@ -24,6 +24,11 @@
             <i class="fa-solid fa-circle-exclamation"></i>
             <span>{{ otp_error }}</span>
         </div>
+        {% elif otp_success %}
+        <div class="otp-modal-alert otp-modal-alert-success" role="status">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>{{ otp_success }}</span>
+        </div>
         {% else %}
         <div class="otp-modal-alert otp-modal-alert-info" role="status">
             <i class="fa-solid fa-envelope"></i>
@@ -47,7 +52,11 @@
         </p>
 
         <div class="otp-modal-resend">
-            <a href="{{ url_for('auth.cancel_verification') }}">Cancel and go back</a>
+            <form action="{{ url_for('auth.resend_otp') }}" method="POST" class="otp-resend-form">
+                <span class="otp-resend-label">Didn't get the code?</span>
+                <button type="submit" class="otp-resend-btn">Resend code</button>
+            </form>
+            <a href="{{ url_for('auth.cancel_verification') }}" class="otp-cancel-link">Cancel and go back</a>
         </div>
     </div>
 </div>

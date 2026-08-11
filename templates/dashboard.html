@@ -40,13 +40,13 @@
 
 {% block content %}
 <div id="app-state" data-has-dataset="{{ 'true' if has_dataset else 'false' }}" class="hidden"></div>
-<div class="{% if not has_dataset %}space-y-4{% else %}space-y-6{% endif %}">
+<div class="{% if not has_dataset %}dashboard-upload-view space-y-4{% else %}space-y-6{% endif %}">
 
     <!-- Top Grid: Greeting and Stats Summary -->
     <div class="dashboard-workbench-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/[0.05] pb-3">
         <div>
             <h1 class="font-outfit font-bold text-3xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Data Analysis Workbench</h1>
-            <p class="text-sm text-slate-400">Upload your dataset, perform automated cleaning, and ask AI for visual insights.</p>
+            <p id="workbench-subtitle" class="text-sm text-slate-400">{% if has_dataset %}Your dataset is loaded. Clean your data and ask the AI for visual insights.{% else %}Upload your dataset, perform automated cleaning, and ask AI for visual insights.{% endif %}</p>
         </div>
         <div class="flex items-center space-x-2">
             <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-cyberCyan/10 border border-cyberCyan/20 text-cyberCyan flex items-center gap-1.5">
@@ -64,31 +64,30 @@
         <!-- so it stops reserving grid space and pushing the right column off-center. -->
         <div id="left-panel" class="{% if not has_dataset %}hidden{% endif %} lg:col-span-4 space-y-6">
 
-            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" class="hidden">
             <!-- Diagnostics Card (Initially Hidden or Placeholder) -->
             <div id="diagnostics-card" class="{% if not has_dataset %}hidden{% endif %} backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4 transition-all">
                 <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
                     <i class="fa-solid fa-chart-line text-neonEmerald"></i>
                     Dataset Diagnostics
                 </h3>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="bg-white/[0.02] border border-white/[0.05] p-3 rounded-xl">
-                        <p class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Rows</p>
-                        <p id="diag-rows" class="text-xl font-bold font-outfit text-white mt-1">{{ diagnostics['row_count'] if diagnostics else '0' }}</p>
+                <div class="diag-stats-panel panel-inset">
+                    <div class="diag-stat-row">
+                        <span class="diag-stat-label">Total Rows</span>
+                        <span id="diag-rows" class="diag-stat-value">{{ diagnostics['row_count'] if diagnostics else '0' }}</span>
                     </div>
-                    <div class="bg-white/[0.02] border border-white/[0.05] p-3 rounded-xl">
-                        <p class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Columns</p>
-                        <p id="diag-cols" class="text-xl font-bold font-outfit text-white mt-1">{{ diagnostics['col_count'] if diagnostics else '0' }}</p>
+                    <div class="diag-stat-row">
+                        <span class="diag-stat-label">Columns</span>
+                        <span id="diag-cols" class="diag-stat-value">{{ diagnostics['col_count'] if diagnostics else '0' }}</span>
                     </div>
-                    <div class="bg-white/[0.02] border border-white/[0.05] p-3 rounded-xl col-span-2">
-                        <p class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Missing Values</p>
-                        <p id="diag-nulls" class="text-lg font-bold font-outfit text-amber-400 mt-1">
+                    <div class="diag-stat-row diag-stat-row--last">
+                        <span class="diag-stat-label">Missing Values</span>
+                        <span id="diag-nulls" class="diag-stat-value diag-stat-value--warn">
                             {% if diagnostics %}
                                 {{ diagnostics['null_counts'].values() | sum }}
                             {% else %}
                                 0
                             {% endif %}
-                        </p>
+                        </span>
                     </div>
                 </div>
 
@@ -204,6 +203,7 @@
 
             <!-- Single Centered Hero Upload Box (shown when no dataset is loaded) -->
             <div id="no-dataset-card" class="{% if has_dataset %}hidden{% endif %} upload-hero-wrap">
+                <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" class="hidden">
                 <div id="dropzone-container" class="upload-hero-card backdrop-blur-2xl bg-white/[0.02] border border-white/[0.06] rounded-3xl shadow-2xl flex flex-col items-center justify-center transition-all duration-500">
                     <div id="dropzone" class="upload-dropzone w-full flex flex-col items-center justify-center border-2 border-dashed border-white/[0.08] hover:border-cyberCyan/40 hover:bg-white/[0.01] rounded-2xl text-center cursor-pointer transition-all duration-300 bg-transparent group">
                         <div class="w-16 h-16 mb-4 rounded-2xl bg-cyberCyan/10 border border-cyberCyan/20 flex items-center justify-center text-cyberCyan text-3xl shadow-xl shadow-cyberCyan/5 group-hover:scale-105 group-hover:bg-cyberCyan/20 group-hover:border-cyberCyan/40 transition-all duration-300" id="upload-icon-container">
@@ -520,12 +520,16 @@
         initCustomDropdowns();
         restoreDashboardState();
 
-        document.getElementById('cleaning-form')?.addEventListener('change', saveDashboardState);
-        document.getElementById('report-notes')?.addEventListener('input', saveDashboardState);
-
         if (activeDatasetLoaded) {
+            document.getElementById('no-dataset-card')?.classList.add('hidden');
+            document.getElementById('workbench-panels')?.classList.remove('hidden');
+            setWorkbenchLayout(true);
+            syncDiagStatSizes();
             restoreChatFromServer();
         }
+
+        document.getElementById('cleaning-form')?.addEventListener('change', saveDashboardState);
+        document.getElementById('report-notes')?.addEventListener('input', saveDashboardState);
     });
 
     window.addEventListener('analystgpt-theme-change', function () {
@@ -578,6 +582,7 @@
     });
 
     document.body.addEventListener('drop', (e) => {
+        if (activeDatasetLoaded) return;
         const dt = e.dataTransfer;
         const files = dt.files;
         if (files.length > 0) {
@@ -587,6 +592,7 @@
 
     if(fileInput) {
         fileInput.addEventListener('change', (e) => {
+            if (activeDatasetLoaded) return;
             if(e.target.files.length > 0) {
                 uploadCSVFile(e.target.files[0]);
             }
@@ -623,6 +629,8 @@
 
     // File Upload (CSV, XLSX, XLS)
     function uploadCSVFile(file) {
+        if (activeDatasetLoaded) return;
+
         const nameLower = file.name.toLowerCase();
         if (!nameLower.endsWith('.csv') && !nameLower.endsWith('.xlsx') && !nameLower.endsWith('.xls')) {
             alert("Only CSV and Excel (.xlsx, .xls) files are supported.");
@@ -675,6 +683,11 @@
                 activeDatasetLoaded = true;
                 saveDashboardState();
 
+                const subtitle = document.getElementById('workbench-subtitle');
+                if (subtitle) {
+                    subtitle.textContent = 'Your dataset is loaded. Clean your data and ask the AI for visual insights.';
+                }
+
                 // Alert Toast
                 showSuccessNotification("Dataset uploaded and parsed successfully!");
             } else {
@@ -691,16 +704,32 @@
     }
 
     // Diagnostics Rendering
+    function formatDiagNumber(value) {
+        const num = Number(String(value ?? '0').replace(/,/g, ''));
+        return Number.isFinite(num) ? num.toLocaleString('en-US') : String(value ?? '0');
+    }
+
+    function fitDiagStatValue(el, value) {
+        if (!el) return;
+        el.textContent = formatDiagNumber(value);
+    }
+
+    function syncDiagStatSizes() {
+        fitDiagStatValue(document.getElementById('diag-rows'), document.getElementById('diag-rows')?.textContent.trim());
+        fitDiagStatValue(document.getElementById('diag-cols'), document.getElementById('diag-cols')?.textContent.trim());
+        fitDiagStatValue(document.getElementById('diag-nulls'), document.getElementById('diag-nulls')?.textContent.trim());
+    }
+
     function renderDiagnostics(diag) {
-        document.getElementById('diag-rows').innerText = diag.row_count;
-        document.getElementById('diag-cols').innerText = diag.col_count;
+        fitDiagStatValue(document.getElementById('diag-rows'), diag.row_count);
+        fitDiagStatValue(document.getElementById('diag-cols'), diag.col_count);
 
         // Sum nulls
         let sumNulls = 0;
         for (let col in diag.null_counts) {
             sumNulls += diag.null_counts[col];
         }
-        document.getElementById('diag-nulls').innerText = sumNulls;
+        fitDiagStatValue(document.getElementById('diag-nulls'), sumNulls);
 
         // Render column schema list with full profile stats
         const listDiv = document.getElementById('diag-columns-list');
@@ -903,6 +932,11 @@ Format your response with clear sections using **bold** headers. Be professional
                 document.getElementById('diagnostics-card').classList.add('hidden');
                 document.getElementById('cleaning-card').classList.add('hidden');
                 document.getElementById('no-dataset-card').classList.remove('hidden');
+
+                const subtitle = document.getElementById('workbench-subtitle');
+                if (subtitle) {
+                    subtitle.textContent = 'Upload your dataset, perform automated cleaning, and ask AI for visual insights.';
+                }
 
                 // Go back to full-width centered dropzone layout
                 setWorkbenchLayout(false);

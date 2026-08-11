@@ -86,6 +86,10 @@ def upload():
         
     if "file" not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
+
+    existing_path = get_dataset_path()
+    if existing_path and os.path.exists(existing_path):
+        return jsonify({"error": "A dataset is already loaded. Remove it first to upload a new file."}), 409
         
     file = request.files["file"]
     if file.filename == "":

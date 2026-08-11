@@ -171,6 +171,21 @@ class RouteAccessTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/data/dashboard", response.headers.get("Location", ""))
 
+    def test_resend_otp_sends_new_code(self):
+        with self.client.session_transaction() as sess:
+            sess["otp_flow"] = "email"
+            sess["otp_purpose"] = "account login"
+            sess["otp_target_email"] = "user@example.com"
+
+        with patch("routes.auth.db_service.create_otp", return_value="1234") as mock_create, \
+             patch("routes.auth.email_service.send_otp", return_value=True) as mock_send:
+            response = self.client.post("/resend-otp", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/verify-email", response.headers.get("Location", ""))
+        mock_create.assert_called_once_with("user@example.com", "account login")
+        mock_send.assert_called_once_with("user@example.com", "1234", "account login")
+
 
     def test_local_duplicate_analysis_fallback(self):
         service = GroqService()
