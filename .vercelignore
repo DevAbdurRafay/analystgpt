@@ -1,3 +1,6 @@
+# Local dev requirements — NOT installed on Vercel (see requirements-vercel.txt)
+requirements.txt
+
 # Local virtual environments (never deploy these)
 venv/
 .venv/

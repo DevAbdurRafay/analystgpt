@@ -1,9 +1,11 @@
 {
-  "version": 2,
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "api/index.py"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pip install -r requirements-vercel.txt",
+  "functions": {
+    "app.py": {
+      "maxDuration": 60,
+      "memory": 1024,
+      "excludeFiles": "{venv/**,.venv/**,env/**,tests/**,**/__pycache__/**,tailwindcss.exe,.pytest_cache/**,uploads/**}"
     }
-  ]
+  }
 }
