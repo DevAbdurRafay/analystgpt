@@ -27,10 +27,10 @@
 
 {% block content %}
 <div id="app-state" data-has-dataset="{{ 'true' if has_dataset else 'false' }}" class="hidden"></div>
-<div class="space-y-6">
+<div class="{% if not has_dataset %}space-y-4{% else %}space-y-6{% endif %}">
 
     <!-- Top Grid: Greeting and Stats Summary -->
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/[0.05] pb-4">
+    <div class="dashboard-workbench-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/[0.05] pb-3">
         <div>
             <h1 class="font-outfit font-bold text-3xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Data Analysis Workbench</h1>
             <p class="text-sm text-slate-400">Upload your dataset, perform automated cleaning, and ask AI for visual insights.</p>
@@ -81,17 +81,21 @@
 
                 <!-- Columns list scroll box -->
                 <div class="space-y-2">
-                    <p class="text-xs font-semibold text-slate-400">Column Schema Detail:</p>
-                    <div id="diag-columns-list" class="max-h-[180px] overflow-y-auto border border-white/[0.05] rounded-xl bg-black/20 divide-y divide-white/[0.03]">
+                    <p class="diag-section-heading">Column Schema Detail</p>
+                    <div id="diag-columns-list" class="divide-y divide-transparent">
                         {% if diagnostics %}
                             {% for col in diagnostics['columns'] %}
-                            <div class="p-2.5 flex justify-between items-center text-xs">
-                                <span class="font-mono text-slate-300 truncate max-w-[140px]" title="{{ col }}">{{ col }}</span>
-                                <div class="flex items-center space-x-2">
-                                    <span class="px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-400 font-mono text-[10px]">{{ diagnostics['dtypes'][col] }}</span>
-                                    {% if diagnostics['null_counts'][col] > 0 %}
-                                    <span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px]">{{ diagnostics['null_counts'][col] }} nulls</span>
-                                    {% endif %}
+                            {% set profile = diagnostics['column_profiles'][col] %}
+                            <div class="schema-column-item">
+                                <div class="flex justify-between items-center gap-2">
+                                    <span class="schema-column-name" title="{{ col }}">{{ col }}</span>
+                                    <span class="schema-dtype-badge">{{ diagnostics['dtypes'][col] }}</span>
+                                </div>
+                                <div class="schema-stat-row">
+                                    <span class="{% if profile['nulls'] > 0 %}schema-stat-missing-warn{% endif %}">
+                                        Missing: <strong>{{ profile['nulls'] }}</strong> ({{ profile['null_pct'] }}%)
+                                    </span>
+                                    <span>Unique: <strong>{{ profile['unique'] }}</strong></span>
                                 </div>
                             </div>
                             {% endfor %}
@@ -104,256 +108,61 @@
             <div id="cleaning-card" class="{% if not has_dataset %}hidden{% endif %} backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4 transition-all">
                 <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
                     <i class="fa-solid fa-wand-magic-sparkles text-cyberCyan"></i>
-                    Advanced Data Cleaning
+                    Pre-Cleaning Normalization
                 </h3>
                 <form id="cleaning-form" class="space-y-4">
-
-                    <!-- Section: Column Operations -->
-                    <div class="space-y-1">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Column & Header Operations</p>
-                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-headers" name="header_formatting" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Normalize Column Headers</span>
-                                    <p class="text-slate-500 mt-0.5">Converts to <code class="text-cyan-400 bg-black/30 px-1 rounded">snake_case</code>, strips whitespace, replaces spaces/hyphens/dots.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-trim" name="trim_whitespace" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Trim Cell Whitespace</span>
-                                    <p class="text-slate-500 mt-0.5">Strips leading/trailing spaces from all text columns.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-constant" name="drop_constant_cols" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Drop Constant / Empty Columns</span>
-                                    <p class="text-slate-500 mt-0.5">Removes columns with only 1 unique value (zero information value).</p>
-                                </div>
-                            </label>
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-high-card" name="drop_high_cardinality" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Drop High-Cardinality Columns <span class="text-slate-500">(ID detection)</span></span>
-                                    <p class="text-slate-500 mt-0.5">Drops text columns where ≥95% of values are unique — likely ID/hash columns with no analytical value.</p>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Section: Text Formatting -->
-                    <div class="space-y-1">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Text Formatting</p>
-                        <div class="space-y-3 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-bold text-slate-400">Text Case Transformation</label>
-                                <select name="text_case" id="text-case-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
-                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
-                                    <option value="none">No Change</option>
-                                    <option value="lowercase">lowercase — all text to lower</option>
-                                    <option value="uppercase">UPPERCASE — all text to upper</option>
-                                    <option value="titlecase">Title Case — Each Word Capitalized</option>
-                                    <option value="sentencecase">Sentence case — First letter only</option>
-                                </select>
+                    <div class="panel-inset cleaning-options-panel">
+                        <p class="panel-section-label mb-1">Restructured Normalization Pipeline</p>
+                        
+                        <!-- 1. Normalize Column Headers -->
+                        <label class="cleaning-option">
+                            <input type="checkbox" id="clean-headers" name="header_formatting" checked>
+                            <div>
+                                <span class="cleaning-option-title">Normalize Column Headers</span>
+                                <p class="cleaning-option-desc">Converts all headers to lowercase, replaces spaces, hyphens, and dots with underscores.</p>
                             </div>
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-bold text-slate-400">Strip Special Characters</label>
-                                <select name="strip_special_chars" id="strip-chars-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
-                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
-                                    <option value="none">No Change</option>
-                                    <option value="punctuation">Remove Punctuation (keep letters, digits, spaces)</option>
-                                    <option value="non_ascii">Remove Non-ASCII Characters</option>
-                                    <option value="digits">Remove Digits from Text Columns</option>
-                                    <option value="extra_spaces">Collapse Extra Whitespace</option>
-                                </select>
+                        </label>
+
+                        <!-- 2. Text Formatting -->
+                        <label class="cleaning-option">
+                            <input type="checkbox" id="clean-text-format" name="text_formatting" checked>
+                            <div>
+                                <span class="cleaning-option-title">Text &amp; Whitespace Formatting</span>
+                                <p class="cleaning-option-desc">Strips outer whitespace, collapses internal whitespace, and title-cases cell values while preserving abbreviations (e.g. HR, IBM, USA, CEO, IT).</p>
                             </div>
-                        </div>
-                    </div>
+                        </label>
 
-                    <!-- Section: Type Conversion & Dates -->
-                    <div class="space-y-1">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Type Conversion & Dates</p>
-                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-numeric" name="numeric_parsing" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Parse Currencies & Percentages</span>
-                                    <p class="text-slate-500 mt-0.5">Converts <code class="text-amber-400 bg-black/30 px-1 rounded">"$1,500"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"12%"</code>, <code class="text-amber-400 bg-black/30 px-1 rounded">"€2.500"</code> into proper floats.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-dates" name="parse_dates" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Auto-Parse Date Columns</span>
-                                    <p class="text-slate-500 mt-0.5">Detects and converts text date columns to proper datetime.</p>
-                                </div>
-                            </label>
-                            <div class="space-y-1 pt-1">
-                                <label class="text-[10px] font-bold text-slate-400">Date Output Format <span class="text-slate-600">(applied after parsing)</span></label>
-                                <select name="date_format_output" id="date-format-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
-                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
-                                    <option value="">Keep as Datetime Object</option>
-                                    <option value="%Y-%m-%d">YYYY-MM-DD (ISO 8601)</option>
-                                    <option value="%d/%m/%Y">DD/MM/YYYY</option>
-                                    <option value="%m/%d/%Y">MM/DD/YYYY</option>
-                                    <option value="%d-%b-%Y">DD-Mon-YYYY (e.g. 09-Aug-2026)</option>
-                                    <option value="%B %d, %Y">Month DD, YYYY (e.g. August 09, 2026)</option>
-                                    <option value="%Y-%m-%d %H:%M:%S">YYYY-MM-DD HH:MM:SS</option>
-                                </select>
+                        <!-- 3. Data Type Correction -->
+                        <label class="cleaning-option">
+                            <input type="checkbox" id="clean-type-correct" name="type_correction" checked>
+                            <div>
+                                <span class="cleaning-option-title">Data Type Correction</span>
+                                <p class="cleaning-option-desc">Automatically infers and corrects column data types from cell values (e.g. text numbers, floats to integers).</p>
                             </div>
-                        </div>
-                    </div>
+                        </label>
 
-                    <!-- Section: Deduplication & Outliers -->
-                    <div class="space-y-1">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Records & Outliers</p>
-                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-duplicates" name="remove_duplicates" checked class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Remove Duplicate Rows</span>
-                                    <p class="text-slate-500 mt-0.5">Drops rows that are completely identical across all columns.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-outliers" name="remove_outliers_iqr" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Remove Extreme Outliers (IQR)</span>
-                                    <p class="text-slate-500 mt-0.5">Drops rows where any numeric value is >1.5× IQR beyond Q1/Q3.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-cap-outliers" name="cap_outliers_iqr" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Cap Outliers — Winsorize</span>
-                                    <p class="text-slate-500 mt-0.5">Clips extreme outliers to IQR boundary instead of deleting them. Preserves row count.</p>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Section: Numeric Transformations -->
-                    <div class="space-y-1">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Numeric Transformations</p>
-                        <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-white/[0.04]">
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-standardize" name="standardize_numeric" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Z-Score Standardize <span class="text-slate-500">(mean=0, std=1)</span></span>
-                                    <p class="text-slate-500 mt-0.5">Normalizes numeric columns for ML models. Formula: <code class="text-cyan-400 bg-black/30 px-1 rounded">(x − μ) / σ</code></p>
-                                </div>
-                            </label>
-                            <label class="flex items-start space-x-2.5 cursor-pointer group">
-                                <input type="checkbox" id="clean-minmax" name="minmax_normalize" class="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-cyberCyan focus:ring-cyberCyan flex-shrink-0">
-                                <div class="text-xs">
-                                    <span class="font-semibold text-slate-200 group-hover:text-white transition-colors">Min-Max Normalize <span class="text-slate-500">(range 0–1)</span></span>
-                                    <p class="text-slate-500 mt-0.5">Scales numeric columns to 0–1 range. Formula: <code class="text-cyan-400 bg-black/30 px-1 rounded">(x − min) / (max − min)</code></p>
-                                </div>
-                            </label>
-                            <div class="space-y-1 pt-1">
-                                <label class="text-[10px] font-bold text-slate-400">Round Numeric Values to N Decimals</label>
-                                <input type="number" name="round_numeric" id="round-numeric-input" min="0" max="10" placeholder="e.g. 2  (leave blank = no rounding)"
-                                    style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
-                                    class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan placeholder-slate-600">
+                        <!-- 4. Date Parsing -->
+                        <label class="cleaning-option">
+                            <input type="checkbox" id="clean-dates" name="parse_dates" checked>
+                            <div>
+                                <span class="cleaning-option-title">Auto-Parse Date Columns</span>
+                                <p class="cleaning-option-desc">Detects date/datetime-like values and converts them to datetime type objects.</p>
                             </div>
-                        </div>
-                    </div>
+                        </label>
 
-                    <!-- Section: Missing Value Strategy -->
-                    <div class="space-y-2">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Missing Value Strategy</p>
-                        <div class="grid grid-cols-1 gap-2 text-xs">
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="none" checked class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
-                                <div>
-                                    <span class="font-semibold text-slate-200">No Change</span>
-                                    <p class="text-slate-500 text-[10px]">Leave all missing values as-is (NaN).</p>
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="drop" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
-                                <div>
-                                    <span class="font-semibold text-slate-200">Drop Rows with Nulls</span>
-                                    <p class="text-slate-500 text-[10px]">Removes any row that contains at least one missing value.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="fill_mean" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
-                                <div>
-                                    <span class="font-semibold text-slate-200">Fill with Mean / Mode</span>
-                                    <p class="text-slate-500 text-[10px]">Numeric → column mean. Text → most frequent value.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="fill_median" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
-                                <div>
-                                    <span class="font-semibold text-slate-200">Fill with Median / Mode</span>
-                                    <p class="text-slate-500 text-[10px]">Robust to outliers. Numeric → median. Text → mode.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="fill_zero" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
-                                <div>
-                                    <span class="font-semibold text-slate-200">Fill with Zero / "Unknown"</span>
-                                    <p class="text-slate-500 text-[10px]">Numeric → 0. Text → "Unknown".</p>
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all" id="fill-custom-label">
-                                <input type="radio" name="null_handling" value="fill_custom" id="radio-fill-custom" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0" onchange="toggleCustomFill()">
-                                <div class="flex-1">
-                                    <span class="font-semibold text-slate-200">Fill with Custom Value</span>
-                                    <p class="text-slate-500 text-[10px]">Specify an exact value to fill all nulls (numeric or text).</p>
-                                    <input type="text" name="custom_fill_value" id="custom-fill-input" placeholder="e.g. 0, N/A, Unknown"
-                                        style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
-                                        class="hidden mt-2 w-full rounded px-2 py-1.5 border text-xs focus:outline-none focus:border-cyberCyan placeholder-slate-600">
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="drop_cols_threshold" id="radio-drop-cols-threshold" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0" onchange="toggleNullColThreshold()">
-                                <div class="flex-1">
-                                    <span class="font-semibold text-slate-200">Drop Columns with >N% Nulls</span>
-                                    <p class="text-slate-500 text-[10px]">Removes columns where missing values exceed the threshold percentage.</p>
-                                    <input type="number" name="null_col_threshold" id="null-col-threshold-input" min="1" max="100" value="50" placeholder="% (default 50)"
-                                        style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
-                                        class="hidden mt-2 w-full rounded px-2 py-1.5 border text-xs focus:outline-none focus:border-cyberCyan">
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="forward_fill" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
-                                <div>
-                                    <span class="font-semibold text-slate-200">Forward Fill <span class="text-amber-400">(Time Series)</span></span>
-                                    <p class="text-slate-500 text-[10px]">Propagates the last valid observation forward.</p>
-                                </div>
-                            </label>
-                            <label class="flex items-center space-x-2.5 p-2.5 bg-white/[0.02] border border-white/[0.05] rounded-lg cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all">
-                                <input type="radio" name="null_handling" value="backward_fill" class="text-cyberCyan focus:ring-cyberCyan bg-white/5 border-white/10 flex-shrink-0">
-                                <div>
-                                    <span class="font-semibold text-slate-200">Backward Fill</span>
-                                    <p class="text-slate-500 text-[10px]">Uses next valid observation to fill gaps.</p>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Section: PII / Data Privacy -->
-                    <div class="space-y-1">
-                        <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500">Privacy & PII Detection</p>
-                        <div class="bg-black/20 rounded-xl p-3 border border-white/[0.04] space-y-1">
-                            <label class="text-[10px] font-bold text-slate-400">Action on Detected Emails, Phones, URLs</label>
-                            <select name="pii_handling" id="pii-handling-select" style="background-color:#060b17; color:#e2e8f0; border-color:rgba(255,255,255,0.1);"
-                                class="w-full rounded-lg px-2.5 py-2 border text-xs focus:outline-none focus:border-cyberCyan">
-                                <option value="none">No Action</option>
-                                <option value="redact">Redact — Replace with [EMAIL] [PHONE] [URL]</option>
-                                <option value="drop_col">Drop Column — Remove entire PII column</option>
-                            </select>
-                        </div>
+                        <!-- 5. Control Character Removal -->
+                        <label class="cleaning-option">
+                            <input type="checkbox" id="clean-control-chars" name="control_chars" checked>
+                            <div>
+                                <span class="cleaning-option-title">Remove Control Characters</span>
+                                <p class="cleaning-option-desc">Strips non-printable and control characters from string values.</p>
+                            </div>
+                        </label>
                     </div>
 
                     <button type="button" onclick="runCleaning()" id="run-cleaning-btn" class="w-full py-3 bg-gradient-to-r from-cyberCyan/20 to-neonEmerald/20 border border-cyberCyan/40 hover:border-cyberCyan text-cyberCyan font-bold font-outfit rounded-xl hover:from-cyberCyan/30 hover:to-neonEmerald/30 transition-all flex items-center justify-center space-x-2">
                         <i class="fa-solid fa-sparkles"></i>
-                        <span>Apply Cleaning Pipeline</span>
+                        <span>Apply Restructured Normalization Pipeline</span>
                     </button>
                 </form>
 
@@ -380,32 +189,26 @@
         <!-- Right Side: Workbench Dashboard View -->
         <div id="right-panel" class="{% if not has_dataset %}lg:col-span-12{% else %}lg:col-span-8{% endif %} space-y-6">
 
-            <!-- Single Centered Hero Upload Box (shown when no dataset is loaded) --><div id="no-dataset-card" class="{% if has_dataset %}hidden{% endif %} flex-1 flex flex-col items-start justify-center w-full min-h-[10vh] py-0">
-            
-        <div id="dropzone-container" class="w-full max-w-3xl mx-auto backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl shadow-xl flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-300">
-        <!-- Hero Drag & Drop Zone -->
-        <div id="dropzone" class="w-full h-full flex-1 flex flex-col items-center justify-center border-2 border-dashed border-white/[0.08] hover:border-cyberCyan/50 rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-300 bg-transparent group min-h-[26vh]">
-        <!-- Upload Icon -->
-        <div class="w-14 h-14 mb-4 rounded-2xl bg-cyberCyan/10 border border-cyberCyan/20 flex items-center justify-center text-cyberCyan text-3xl shadow-xl shadow-cyberCyan/10 group-hover:scale-105 group-hover:shadow-cyberCyan/25 transition-all duration-300" id="upload-icon-container">
-            <i class="fa-solid fa-cloud-arrow-up"></i>
-        </div>
-
-        <!-- Text -->
-        <div class="max-w-sm space-y-1.5 mb-5">
-            <h3 class="font-outfit font-bold text-xl text-white">Drag & Drop your CSV/XLSX here</h3>
-            <p class="text-sm text-slate-400">or click to browse files &mdash; <span class="text-slate-500">Max 50MB</span></p>
-            <p class="text-xs text-slate-500 mt-1">Once uploaded, AnalystGPT generates summary metrics, builds a data grid, and activates the AI Copilot.</p>
-        </div>
-
-        <!-- Browse Files Button -->
-        <button onclick="document.getElementById('fileInput').click(); event.stopPropagation();"
-                class="py-2 px-7 bg-gradient-to-r from-cyberCyan to-neonEmerald border-0 text-[#05070c] font-bold font-outfit text-sm rounded-xl hover:brightness-110 shadow-lg shadow-cyberCyan/20 transition-all flex items-center gap-2">
-            <i class="fa-solid fa-folder-open"></i>
-            <span>Browse Files</span>
-        </button>
-    </div>
-</div>
-        </div>
+            <!-- Single Centered Hero Upload Box (shown when no dataset is loaded) -->
+            <div id="no-dataset-card" class="{% if has_dataset %}hidden{% endif %} upload-hero-wrap">
+                <div id="dropzone-container" class="upload-hero-card backdrop-blur-2xl bg-white/[0.02] border border-white/[0.06] rounded-3xl shadow-2xl flex flex-col items-center justify-center transition-all duration-500">
+                    <div id="dropzone" class="upload-dropzone w-full flex flex-col items-center justify-center border-2 border-dashed border-white/[0.08] hover:border-cyberCyan/40 hover:bg-white/[0.01] rounded-2xl text-center cursor-pointer transition-all duration-300 bg-transparent group">
+                        <div class="w-16 h-16 mb-4 rounded-2xl bg-cyberCyan/10 border border-cyberCyan/20 flex items-center justify-center text-cyberCyan text-3xl shadow-xl shadow-cyberCyan/5 group-hover:scale-105 group-hover:bg-cyberCyan/20 group-hover:border-cyberCyan/40 transition-all duration-300" id="upload-icon-container">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <div class="max-w-xl space-y-1.5 mb-4">
+                            <h3 class="font-outfit font-bold text-xl sm:text-2xl text-white tracking-tight group-hover:text-cyberCyan transition-colors duration-300">Drag & Drop your CSV/XLSX here</h3>
+                            <p class="text-sm text-slate-400">or click to browse files &mdash; <span class="text-slate-500 font-mono">Max 50MB</span></p>
+                            <p class="text-xs text-slate-500 leading-relaxed max-w-md mx-auto pt-0.5">Upload a file to preview your data, clean it, and ask the AI assistant questions.</p>
+                        </div>
+                        <button onclick="document.getElementById('fileInput').click(); event.stopPropagation();"
+                                class="py-3 px-9 bg-gradient-to-r from-cyberCyan to-neonEmerald border-0 text-[#05070c] font-bold font-outfit text-sm rounded-xl hover:brightness-110 shadow-lg shadow-cyberCyan/20 transition-all flex items-center gap-2 transform active:scale-95 duration-200">
+                            <i class="fa-solid fa-folder-open"></i>
+                            <span>Browse Files</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <!-- Active Workbench Panels (Visible when CSV is loaded) -->
             <div id="workbench-panels" class="{% if not has_dataset %}hidden{% endif %} space-y-6">
@@ -478,25 +281,23 @@
                         <!-- Override chart controls -->
                         <div class="flex items-center space-x-2 text-xs">
                             <label for="chart-override" class="text-slate-400 font-semibold">Type:</label>
-                            <select id="chart-override" onchange="overrideChartType()" 
-                                style="background-color:#0f172a; color:#e2e8f0; border-color:rgba(255,255,255,0.15);"
-                                class="rounded-lg px-2.5 py-1.5 border focus:outline-none focus:border-cyberCyan text-sm">
-                                <option value="bar" style="background:#0f172a">Bar</option>
-                                <option value="line" style="background:#0f172a">Line</option>
-                                <option value="pie" style="background:#0f172a">Pie</option>
-                                <option value="scatter" style="background:#0f172a">Scatter</option>
-                                <option value="histogram" style="background:#0f172a">Histogram</option>
+                            <select id="chart-override" onchange="overrideChartType()"
+                                class="rounded-lg px-2.5 py-1.5 border border-white/[0.15] bg-[#0f172a] text-[#e2e8f0] focus:outline-none focus:border-cyberCyan text-sm">
+                                <option value="bar">Bar</option>
+                                <option value="line">Line</option>
+                                <option value="pie">Pie</option>
+                                <option value="scatter">Scatter</option>
+                                <option value="histogram">Histogram</option>
                             </select>
                         </div>
                     </div>
 
                     <!-- Rendering Canvas -->
-                    <div class="bg-black/25 rounded-xl border border-white/[0.05] p-3 w-full overflow-hidden flex items-center justify-center min-h-[300px]">
-                        <!-- Plotly interactive chart -->
+                    <div id="single-chart-view" class="bg-black/25 rounded-xl border border-white/[0.05] p-3 w-full overflow-hidden flex items-center justify-center min-h-[300px]">
                         <div id="plotly-canvas" class="w-full h-[380px]"></div>
-                        <!-- Matplotlib/Seaborn static image -->
                         <img id="chart-image-canvas" src="" alt="Chart" class="hidden max-w-full rounded-xl" style="max-height:420px;">
                     </div>
+                    <div id="charts-gallery" class="hidden space-y-4"></div>
                 </div>
 
                 <!-- AI Copilot Chat Card -->
@@ -520,77 +321,41 @@
                         </div>
                     </div>
 
-                <!-- Message Input Form -->
-                    <div class="relative">
+                    <!-- Message Input Form -->
+                    <div class="relative mt-2">
                         <textarea id="chatInput" rows="2" placeholder="Ask a question about the dataset..."
-                                  class="w-full pl-4 pr-24 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-none"></textarea>
-                        <!-- Stop button (hidden when idle) -->
-                        <button onclick="stopChatMessage()" id="stop-chat-btn"
-                                class="hidden absolute right-14 bottom-3.5 w-9 h-9 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 hover:bg-red-500/30 transition-all focus:outline-none"
-                                title="Stop response">
-                            <i class="fa-solid fa-stop text-xs"></i>
-                        </button>
-                        <button onclick="sendChatMessage()" id="send-chat-btn"
-                                class="absolute right-3.5 bottom-3.5 w-9 h-9 rounded-xl bg-gradient-to-tr from-cyberCyan to-neonEmerald border-0 flex items-center justify-center text-darkBg shadow hover:brightness-110 transition-all focus:outline-none">
-                            <i class="fa-solid fa-paper-plane text-darkBg"></i>
-                        </button>
-                        <!-- Report Section: AI-Powered PDF Export -->
-                <div class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
+                                  class="w-full pl-4 pr-36 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-none"></textarea>
+                        <div class="absolute right-3.5 bottom-3.5 flex items-center gap-2">
+                            <button onclick="stopChatMessage()" id="stop-chat-btn"
+                                    class="hidden items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1a1f2e] hover:bg-[#252b3b] border border-white/[0.12] text-slate-200 transition-all text-xs font-semibold shadow-lg focus:outline-none">
+                                <i class="fa-solid fa-stop text-[10px] text-red-400"></i>
+                                <span>Stop generating</span>
+                            </button>
+                            <button onclick="sendChatMessage()" id="send-chat-btn"
+                                    class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyberCyan to-neonEmerald border-0 flex items-center justify-center text-darkBg shadow hover:brightness-110 transition-all focus:outline-none">
+                                <i class="fa-solid fa-paper-plane text-darkBg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Report Card -->
+                <div id="export-report-card" class="backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
                     <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
-                        <i class="fa-solid fa-file-pdf text-red-400"></i>
-                        AI-Powered Analytical PDF Report
+                        <i class="fa-solid fa-file-export text-neonEmerald"></i>
+                        Export Report
                     </h3>
-
-                    <!-- AI Report Prompt -->
-                    <div class="space-y-2">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">Ask AI to Build Your Report</label>
-                        <div class="relative">
-                            <textarea id="ai-report-prompt" rows="3"
-                                placeholder="e.g. 'Generate a professional analytical report with key insights, executive summary, sales trends, top products, and regional breakdown charts'"
-                                class="w-full pl-4 pr-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-y"></textarea>
-                        </div>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button onclick="setReportPrompt('Generate a complete executive summary with KPI highlights, data quality overview, top insights, and trend analysis with professional charts.')" 
-                                class="text-[10px] px-2 py-1 rounded-lg bg-cyberCyan/10 text-cyberCyan border border-cyberCyan/20 hover:bg-cyberCyan/20 transition-all cursor-pointer">Executive Summary</button>
-                            <button onclick="setReportPrompt('Create a sales analysis report with revenue breakdown by category, top 10 products, monthly trend charts, regional performance heatmap, and growth recommendations.')" 
-                                class="text-[10px] px-2 py-1 rounded-lg bg-neonEmerald/10 text-neonEmerald border border-neonEmerald/20 hover:bg-neonEmerald/20 transition-all cursor-pointer">Sales Analysis</button>
-                            <button onclick="setReportPrompt('Build a data quality audit report showing column completeness, outlier distribution, missing value analysis, duplicate detection results, and data cleaning recommendations.')" 
-                                class="text-[10px] px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer">Data Quality Audit</button>
-                            <button onclick="setReportPrompt('Generate a statistical analysis report with correlation matrix, distribution plots for numeric columns, descriptive statistics table, and anomaly detection summary.')" 
-                                class="text-[10px] px-2 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-all cursor-pointer">Statistical Analysis</button>
-                        </div>
-                    </div>
-
-                    <!-- Generate AI Insights button -->
-                    <button onclick="generateAIReport()" id="gen-ai-report-btn"
-                        class="w-full py-2.5 bg-gradient-to-r from-purple-600/20 to-cyberCyan/20 border border-purple-500/40 text-purple-300 font-bold font-outfit text-sm rounded-xl hover:from-purple-600/30 hover:to-cyberCyan/30 hover:border-purple-400/60 transition-all flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-robot"></i>
-                        <span>Generate AI Insights for Report</span>
-                    </button>
-
-                    <!-- AI Insights Preview (hidden until generated) -->
-                    <div id="ai-report-insights" class="hidden bg-black/30 border border-white/[0.06] rounded-xl p-3 space-y-2">
-                        <p class="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1.5">
-                            <i class="fa-solid fa-circle-check text-neonEmerald"></i> AI Insights Generated
-                        </p>
-                        <div id="ai-insights-text" class="text-xs text-slate-300 leading-relaxed max-h-[120px] overflow-y-auto"></div>
-                    </div>
-
-                    <!-- Executive Notes -->
-                    <div class="space-y-2">
-                        <label for="report-notes" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Additional Executive Notes</label>
-                        <textarea id="report-notes" rows="3" placeholder="Enter supplementary notes or observations..."
+                    <div class="space-y-1.5">
+                        <label for="report-notes" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Executive Notes</label>
+                        <textarea id="report-notes" rows="3" placeholder="Add supplementary notes or observations to include in the report..."
                                   class="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyberCyan focus:ring-1 focus:ring-cyberCyan transition-all text-sm resize-y"></textarea>
                     </div>
-
-                    <!-- Export PDF button -->
                     <button onclick="downloadReport()" id="export-pdf-btn"
-                            class="w-full py-3 bg-red-500/10 border border-red-500/30 text-red-400 font-bold font-outfit rounded-xl hover:bg-red-500/20 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-red-500/5">
-                        <i class="fa-solid fa-download"></i>
-                        <span>Generate & Download PDF Report</span>
+                            class="w-full py-3 bg-red-500/10 border border-red-500/30 text-red-400 font-bold font-outfit text-sm rounded-xl hover:bg-red-500/20 hover:border-red-400/60 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-500/5">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <span>PDF Report</span>
                     </button>
-                </div>
-              </div>
+                    <p class="text-[10px] text-slate-600 text-center">Includes: Dataset schema, diagnostics, AI chat transcript & charts</p>
                 </div>
 
             </div>
@@ -610,6 +375,143 @@
     let activeChartData = null;      // Stores current Plotly data object from AI
     let activeChartImageBase64 = null; // Decoded canvas snapshot
     let chatHistory = [];            // Log of user and AI messages
+
+    const DASHBOARD_STATE_KEY = 'analystgpt-dashboard-state';
+
+    function saveDashboardState() {
+        const cleaningForm = document.getElementById('cleaning-form');
+        const cleaningOptions = {};
+        if (cleaningForm) {
+            cleaningForm.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+                cleaningOptions[cb.name] = cb.checked;
+            });
+        }
+        const state = {
+            reportNotes: document.getElementById('report-notes')?.value || '',
+            cleaningOptions,
+            activeChartData,
+            activeChartImageBase64,
+            chartTitle: document.getElementById('chart-display-title')?.innerText || '',
+            chatHistory,
+        };
+        try {
+            sessionStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(state));
+        } catch (e) {
+            console.warn('Could not persist dashboard state', e);
+        }
+    }
+
+    function restoreDashboardState() {
+        let saved = null;
+        try {
+            saved = JSON.parse(sessionStorage.getItem(DASHBOARD_STATE_KEY) || 'null');
+        } catch (e) {
+            saved = null;
+        }
+
+        if (saved?.cleaningOptions) {
+            Object.entries(saved.cleaningOptions).forEach(([name, checked]) => {
+                const cb = document.querySelector(`#cleaning-form input[name="${name}"]`);
+                if (cb) cb.checked = !!checked;
+            });
+        }
+
+        const notesEl = document.getElementById('report-notes');
+        if (notesEl && saved?.reportNotes) {
+            notesEl.value = saved.reportNotes;
+        }
+
+        if (saved?.activeChartData) {
+            activeChartData = saved.activeChartData;
+            activeChartImageBase64 = saved.activeChartImageBase64 || null;
+            document.getElementById('chart-card')?.classList.remove('hidden');
+            if (saved.chartTitle) {
+                document.getElementById('chart-display-title').innerText = saved.chartTitle;
+            }
+            const plotlyCanvas = document.getElementById('plotly-canvas');
+            const imageCanvas = document.getElementById('chart-image-canvas');
+            if (saved.activeChartData.chart_image_base64) {
+                plotlyCanvas?.classList.add('hidden');
+                imageCanvas.src = saved.activeChartData.chart_image_base64;
+                imageCanvas.classList.remove('hidden');
+            } else if (saved.activeChartData.chart_type && saved.activeChartData.chart_data) {
+                imageCanvas?.classList.add('hidden');
+                plotlyCanvas?.classList.remove('hidden');
+                setCustomDropdownValue(document.getElementById('chart-override'), saved.activeChartData.chart_type);
+                drawPlotlyChart(saved.activeChartData.chart_type, saved.activeChartData.chart_title, saved.activeChartData.chart_data);
+            }
+        }
+    }
+
+    function restoreChatFromServer() {
+        if (!activeDatasetLoaded) return;
+        fetch("{{ url_for('ai.history') }}")
+            .then(res => res.json())
+            .then(data => {
+                const messages = data.messages || [];
+                if (messages.length === 0) {
+                    restoreChatFromSessionStorage();
+                    return;
+                }
+                chatHistory = [];
+                const feed = document.getElementById('chat-messages');
+                feed.innerHTML = '';
+                messages.forEach((msg) => {
+                    appendChatBubble(msg.sender, msg.text);
+                    chatHistory.push({ sender: msg.sender, text: msg.text });
+                    if (msg.sender === 'ai' && msg.chart_type && msg.chart_data && !activeChartData) {
+                        let chartData = msg.chart_data;
+                        if (typeof chartData === 'string') {
+                            try { chartData = JSON.parse(chartData); } catch (e) { chartData = null; }
+                        }
+                        if (!chartData) return;
+                        activeChartData = {
+                            chart_type: msg.chart_type,
+                            chart_data: chartData,
+                            chart_title: 'Visual Analytics',
+                        };
+                        document.getElementById('chart-card')?.classList.remove('hidden');
+                        setCustomDropdownValue(document.getElementById('chart-override'), msg.chart_type);
+                        drawPlotlyChart(msg.chart_type, 'Visual Analytics', chartData);
+                    }
+                });
+                saveDashboardState();
+            })
+            .catch(() => restoreChatFromSessionStorage());
+    }
+
+    function restoreChatFromSessionStorage() {
+        let saved = null;
+        try {
+            saved = JSON.parse(sessionStorage.getItem(DASHBOARD_STATE_KEY) || 'null');
+        } catch (e) {
+            saved = null;
+        }
+        if (!saved?.chatHistory?.length) return;
+        chatHistory = saved.chatHistory;
+        const feed = document.getElementById('chat-messages');
+        feed.innerHTML = '';
+        chatHistory.forEach((msg) => appendChatBubble(msg.sender, msg.text));
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initCustomDropdowns();
+        restoreDashboardState();
+
+        document.getElementById('cleaning-form')?.addEventListener('change', saveDashboardState);
+        document.getElementById('report-notes')?.addEventListener('input', saveDashboardState);
+
+        if (activeDatasetLoaded) {
+            restoreChatFromServer();
+        }
+    });
+
+    window.addEventListener('analystgpt-theme-change', () => {
+        const last = window.__lastPlotlyChart;
+        if (last && typeof drawPlotlyChart === 'function') {
+            drawPlotlyChart(last.type, last.chartTitle, last.data, last.targetId);
+        }
+    });
 
     // Drag and Drop triggers
     const dropzone = document.getElementById('dropzone');
@@ -746,6 +648,7 @@
                 setWorkbenchLayout(true);
 
                 activeDatasetLoaded = true;
+                saveDashboardState();
 
                 // Alert Toast
                 showSuccessNotification("Dataset uploaded and parsed successfully!");
@@ -774,25 +677,28 @@
         }
         document.getElementById('diag-nulls').innerText = sumNulls;
 
-        // Render lists
+        // Render column schema list with full profile stats
         const listDiv = document.getElementById('diag-columns-list');
         listDiv.innerHTML = '';
         diag.columns.forEach(col => {
             const dtype = diag.dtypes[col] || '';
-            const nulls = diag.null_counts[col] || 0;
+            const profile = (diag.column_profiles && diag.column_profiles[col]) || {};
+            const nulls = profile.nulls !== undefined ? profile.nulls : (diag.null_counts[col] || 0);
+            const nullPct = profile.null_pct !== undefined ? profile.null_pct : 0;
+            const unique = profile.unique !== undefined ? profile.unique : '—';
 
-            let nullBadge = '';
-            if (nulls > 0) {
-                nullBadge = `<span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px]">${nulls} nulls</span>`;
-            }
+            const nullClass = nulls > 0 ? 'schema-stat-missing-warn' : '';
 
             const item = document.createElement('div');
-            item.className = "p-2.5 flex justify-between items-center text-xs";
+            item.className = 'schema-column-item';
             item.innerHTML = `
-                <span class="font-mono text-slate-300 truncate max-w-[140px]" title="${col}">${col}</span>
-                <div class="flex items-center space-x-2">
-                    <span class="px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-400 font-mono text-[10px]">${dtype}</span>
-                    ${nullBadge}
+                <div class="flex justify-between items-center gap-2">
+                    <span class="schema-column-name" title="${col}">${col}</span>
+                    <span class="schema-dtype-badge">${dtype}</span>
+                </div>
+                <div class="schema-stat-row">
+                    <span class="${nullClass}">Missing: <strong>${nulls}</strong> (${nullPct}%)</span>
+                    <span>Unique: <strong>${unique}</strong></span>
                 </div>
             `;
             listDiv.appendChild(item);
@@ -832,31 +738,13 @@
         const btn = document.getElementById('run-cleaning-btn');
         if (btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Cleaning...</span>'; btn.disabled = true; }
 
-        // Round numeric — only include if filled
-        const roundVal = formData.get('round_numeric');
-        const dateFormatVal = formData.get('date_format_output') || '';
-
         const payload = {
             header_formatting: formData.get('header_formatting') === 'on',
-            trim_whitespace: formData.get('trim_whitespace') === 'on',
-            drop_constant_cols: formData.get('drop_constant_cols') === 'on',
-            drop_high_cardinality: formData.get('drop_high_cardinality') === 'on',
-            text_case: formData.get('text_case') || 'none',
-            strip_special_chars: formData.get('strip_special_chars') || 'none',
-            numeric_parsing: formData.get('numeric_parsing') === 'on',
+            text_formatting: formData.get('text_formatting') === 'on',
+            type_correction: formData.get('type_correction') === 'on',
             parse_dates: formData.get('parse_dates') === 'on',
-            date_format_output: dateFormatVal,
-            remove_duplicates: formData.get('remove_duplicates') === 'on',
-            remove_outliers_iqr: formData.get('remove_outliers_iqr') === 'on',
-            cap_outliers_iqr: formData.get('cap_outliers_iqr') === 'on',
-            standardize_numeric: formData.get('standardize_numeric') === 'on',
-            minmax_normalize: formData.get('minmax_normalize') === 'on',
-            null_handling: formData.get('null_handling') || 'none',
-            custom_fill_value: formData.get('custom_fill_value') || null,
-            null_col_threshold: formData.get('null_col_threshold') || 50,
-            pii_handling: formData.get('pii_handling') || 'none',
+            control_chars: formData.get('control_chars') === 'on',
         };
-        if (roundVal !== null && roundVal !== '') payload.round_numeric = parseInt(roundVal);
 
         fetch("{{ url_for('data.clean') }}", {
             method: 'POST',
@@ -865,42 +753,21 @@
         })
         .then(res => res.json())
         .then(data => {
-            if (btn) { btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> <span>Apply Cleaning Pipeline</span>'; btn.disabled = false; }
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> <span>Apply Restructured Normalization Pipeline</span>'; btn.disabled = false; }
             if(data.error) {
                 alert("Error cleaning data: " + data.error);
             } else {
                 renderDiagnostics(data.diagnostics);
                 renderSpreadsheet(data.diagnostics);
+                saveDashboardState();
                 showSuccessNotification("Dataset cleaned and updated!");
             }
         })
         .catch(err => {
-            if (btn) { btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> <span>Apply Cleaning Pipeline</span>'; btn.disabled = false; }
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> <span>Apply Restructured Normalization Pipeline</span>'; btn.disabled = false; }
             console.error(err);
             alert("Failed to reach server for cleaning.");
         });
-    }
-
-    // Toggle custom fill input visibility
-    function toggleCustomFill() {
-        const input = document.getElementById('custom-fill-input');
-        if (input) input.classList.remove('hidden');
-    }
-    // Also hide custom fill when other radios are selected
-    document.addEventListener('change', function(e) {
-        if (e.target.name === 'null_handling' && e.target.value !== 'fill_custom') {
-            const el = document.getElementById('custom-fill-input');
-            if (el) el.classList.add('hidden');
-        }
-        if (e.target.name === 'null_handling' && e.target.value !== 'drop_cols_threshold') {
-            const el = document.getElementById('null-col-threshold-input');
-            if (el) el.classList.add('hidden');
-        }
-    });
-
-    function toggleNullColThreshold() {
-        const input = document.getElementById('null-col-threshold-input');
-        if (input) input.classList.remove('hidden');
     }
 
     // ── Download CSV ──────────────────────────────────────────────────────────
@@ -1016,6 +883,7 @@ Format your response with clear sections using **bold** headers. Be professional
                 setWorkbenchLayout(false);
 
                 activeDatasetLoaded = false;
+                sessionStorage.removeItem(DASHBOARD_STATE_KEY);
 
                 // clear chat history and active chart
                 chatHistory = [];
@@ -1032,7 +900,7 @@ Format your response with clear sections using **bold** headers. Be professional
                                 <li>"Summarize this dataset."</li>
                                 <li>"Show a bar chart of the sales by category."</li>
                                 <li>"Plot a scatter chart of price vs cost."</li>
-                                <li>"Find the highest correlation between numeric columns."</li>
+                                <li>"Show correlation heatmap between all numeric columns."</li>
                             </ul>
                         </div>
                     </div>
@@ -1054,15 +922,19 @@ Format your response with clear sections using **bold** headers. Be professional
     let currentChatAbortController = null;
 
     // Chat Controller
-    function sendChatMessage() {
+    function sendChatMessage(queryOverride) {
         const input = document.getElementById('chatInput');
-        const queryText = input.value.trim();
+        const queryText = (queryOverride ?? input.value).trim();
         if(!queryText) return;
 
         input.value = '';
 
         // Show stop button, disable send button
-        document.getElementById('stop-chat-btn').classList.remove('hidden');
+        const stopBtn = document.getElementById('stop-chat-btn');
+        if (stopBtn) {
+            stopBtn.classList.remove('hidden');
+            stopBtn.classList.add('flex');
+        }
         document.getElementById('send-chat-btn').disabled = true;
         document.getElementById('send-chat-btn').classList.add('opacity-50');
 
@@ -1093,28 +965,8 @@ Format your response with clear sections using **bold** headers. Be professional
             } else {
                 appendChatBubble('ai', data.answer);
                 chatHistory.push({sender: 'ai', text: data.answer});
-
-                const plotlyCanvas = document.getElementById('plotly-canvas');
-                const imageCanvas = document.getElementById('chart-image-canvas');
-
-                // Handle matplotlib/seaborn image chart
-                if (data.chart_image_base64) {
-                    activeChartData = data;
-                    document.getElementById('chart-card').classList.remove('hidden');
-                    document.getElementById('chart-display-title').innerText = data.chart_title || 'Visual Analytics';
-                    plotlyCanvas.classList.add('hidden');
-                    imageCanvas.src = data.chart_image_base64;
-                    imageCanvas.classList.remove('hidden');
-                }
-                // Handle Plotly interactive chart
-                else if (data.chart_type && data.chart_data) {
-                    activeChartData = data;
-                    document.getElementById('chart-card').classList.remove('hidden');
-                    imageCanvas.classList.add('hidden');
-                    plotlyCanvas.classList.remove('hidden');
-                    document.getElementById('chart-override').value = data.chart_type;
-                    drawPlotlyChart(data.chart_type, data.chart_title, data.chart_data);
-                }
+                renderAICharts(data);
+                saveDashboardState();
             }
         })
         .catch(err => {
@@ -1137,7 +989,11 @@ Format your response with clear sections using **bold** headers. Be professional
 
     function resetChatControls() {
         currentChatAbortController = null;
-        document.getElementById('stop-chat-btn').classList.add('hidden');
+        const stopBtn = document.getElementById('stop-chat-btn');
+        if (stopBtn) {
+            stopBtn.classList.add('hidden');
+            stopBtn.classList.remove('flex');
+        }
         document.getElementById('send-chat-btn').disabled = false;
         document.getElementById('send-chat-btn').classList.remove('opacity-50');
     }
@@ -1173,6 +1029,7 @@ Format your response with clear sections using **bold** headers. Be professional
         `;
         feed.appendChild(bubble);
         feed.scrollTop = feed.scrollHeight;
+        saveDashboardState();
     }
 
     function appendThinkingBubble() {
@@ -1198,10 +1055,87 @@ Format your response with clear sections using **bold** headers. Be professional
     }
 
     // Charting Engine via Plotly.js
-    function drawPlotlyChart(type, title, data) {
-        const gd = document.getElementById('plotly-canvas');
+    function renderAICharts(data) {
+        const chartCard = document.getElementById('chart-card');
+        const gallery = document.getElementById('charts-gallery');
+        const singleView = document.getElementById('single-chart-view');
+        const plotlyCanvas = document.getElementById('plotly-canvas');
+        const imageCanvas = document.getElementById('chart-image-canvas');
+        const overrideControls = document.querySelector('#chart-override')?.closest('.flex.items-center');
+
+        const charts = Array.isArray(data.charts) ? data.charts.filter(Boolean) : [];
+        const hasMulti = charts.length > 1;
+
+        if (!data.chart_image_base64 && !(data.chart_type && data.chart_data) && charts.length === 0) {
+            return;
+        }
+
+        activeChartData = data;
+        chartCard.classList.remove('hidden');
+        gallery.innerHTML = '';
+
+        if (hasMulti) {
+            if (overrideControls) overrideControls.classList.add('hidden');
+            singleView.classList.add('hidden');
+            gallery.classList.remove('hidden');
+            document.getElementById('chart-display-title').innerText = 'Visual Analytics';
+
+            charts.forEach((chart, idx) => {
+                const block = document.createElement('div');
+                block.className = 'bg-black/25 rounded-xl border border-white/[0.05] p-3 space-y-2';
+                const title = chart.title || chart.chart_title || `Visualization ${idx + 1}`;
+                block.innerHTML = `<p class="text-sm font-semibold text-slate-200">${title}</p>`;
+
+                if (chart.chart_image_base64) {
+                    const img = document.createElement('img');
+                    img.src = chart.chart_image_base64;
+                    img.alt = title;
+                    img.className = 'max-w-full rounded-xl mx-auto';
+                    img.style.maxHeight = '420px';
+                    block.appendChild(img);
+                } else if (chart.chart_type && chart.chart_data) {
+                    const mount = document.createElement('div');
+                    mount.id = `plotly-gallery-${idx}`;
+                    mount.className = 'w-full h-[320px]';
+                    block.appendChild(mount);
+                    gallery.appendChild(block);
+                    drawPlotlyChart(chart.chart_type, title, chart.chart_data, mount.id);
+                    return;
+                }
+                gallery.appendChild(block);
+            });
+
+            if (charts[0]?.chart_image_base64) {
+                activeChartImageBase64 = charts[0].chart_image_base64;
+            }
+            return;
+        }
+
+        if (overrideControls) overrideControls.classList.remove('hidden');
+        gallery.classList.add('hidden');
+        singleView.classList.remove('hidden');
+
+        if (data.chart_image_base64) {
+            document.getElementById('chart-display-title').innerText = data.chart_title || 'Visual Analytics';
+            plotlyCanvas.classList.add('hidden');
+            imageCanvas.src = data.chart_image_base64;
+            imageCanvas.classList.remove('hidden');
+            activeChartImageBase64 = data.chart_image_base64;
+        } else if (data.chart_type && data.chart_data) {
+            document.getElementById('chart-display-title').innerText = data.chart_title || 'Visual Analytics';
+            imageCanvas.classList.add('hidden');
+            plotlyCanvas.classList.remove('hidden');
+            setCustomDropdownValue(document.getElementById('chart-override'), data.chart_type);
+            drawPlotlyChart(data.chart_type, data.chart_title, data.chart_data);
+        }
+    }
+
+    function drawPlotlyChart(type, title, data, targetId) {
+        const gd = document.getElementById(targetId || 'plotly-canvas');
         const chartTitle = title || 'Data Analysis';
-        document.getElementById('chart-display-title').innerText = chartTitle;
+        if (!targetId || targetId === 'plotly-canvas') {
+            document.getElementById('chart-display-title').innerText = chartTitle;
+        }
 
         const DEFAULT_COLORS = ['#06B6D4','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#F97316','#14B8A6','#A78BFA','#FB7185'];
         const barColors = (data.colors && data.colors.length > 0) ? data.colors : DEFAULT_COLORS;
@@ -1225,29 +1159,38 @@ Format your response with clear sections using **bold** headers. Be professional
         }
 
         let traces = [];
+        const plotTheme = (window.getPlotlyTheme ? window.getPlotlyTheme() : {
+            fontColor: '#E2E8F0',
+            mutedColor: '#94A3B8',
+            titleColor: 'rgba(226,232,240,0.7)',
+            gridColor: 'rgba(255,255,255,0.05)',
+            tickColor: 'rgba(255,255,255,0.1)',
+        });
         let layout = {
             title: {
                 text: chartTitle,
-                font: { color: 'rgba(226,232,240,0.7)', size: 13, family: 'Outfit' },
+                font: { color: plotTheme.titleColor, size: 13, family: 'Outfit' },
                 x: 0.02, xanchor: 'left',
                 pad: { t: 0 }
             },
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: '#E2E8F0', family: 'Inter' },
+            font: { color: plotTheme.fontColor, family: 'Inter' },
             margin: { t: 50, r: 20, b: isHorizontal ? 60 : 90, l: isHorizontal ? 160 : 70 },
             xaxis: {
-                gridcolor: 'rgba(255,255,255,0.05)',
-                tickcolor: 'rgba(255,255,255,0.1)',
-                title: { text: xLabel, font: { color: '#94A3B8', size: 11 }, standoff: 10 }
+                gridcolor: plotTheme.gridColor,
+                tickcolor: plotTheme.tickColor,
+                title: { text: xLabel, font: { color: plotTheme.mutedColor, size: 11 }, standoff: 10 }
             },
             yaxis: {
-                gridcolor: 'rgba(255,255,255,0.05)',
-                tickcolor: 'rgba(255,255,255,0.1)',
-                title: { text: yLabel, font: { color: '#94A3B8', size: 11 }, standoff: 10 }
+                gridcolor: plotTheme.gridColor,
+                tickcolor: plotTheme.tickColor,
+                title: { text: yLabel, font: { color: plotTheme.mutedColor, size: 11 }, standoff: 10 }
             },
             colorway: DEFAULT_COLORS
         };
+
+        window.__lastPlotlyChart = { type, chartTitle, data, targetId: targetId || 'plotly-canvas' };
 
         if (type === 'bar') {
             const assignedColors = (data.labels || []).map((_, i) => barColors[i % barColors.length]);
@@ -1314,7 +1257,10 @@ Format your response with clear sections using **bold** headers. Be professional
 
         Plotly.newPlot(gd, traces, layout, {responsive: true, displayModeBar: false}).then(function(gd_instance) {
             Plotly.toImage(gd_instance, {format: 'png', width: 750, height: 420}).then(function(dataUrl) {
-                activeChartImageBase64 = dataUrl;
+                if (!targetId || targetId === 'plotly-canvas') {
+                    activeChartImageBase64 = dataUrl;
+                    saveDashboardState();
+                }
             });
         });
     }
@@ -1335,13 +1281,16 @@ Format your response with clear sections using **bold** headers. Be professional
 
         const notes = document.getElementById('report-notes').value;
         const btn = document.getElementById('export-pdf-btn');
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Compiling PDF Report...</span>';
-        btn.disabled = true;
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Compiling PDF...</span>';
+            btn.disabled = true;
+        }
 
         const payload = {
             notes: notes,
             chat_history: chatHistory,
-            charts: []
+            charts: [],
+            format: 'pdf'
         };
 
         // Add active chart image if exists
@@ -1362,50 +1311,48 @@ Format your response with clear sections using **bold** headers. Be professional
             if (res.status === 200) {
                 return res.blob();
             } else {
-                throw new Error("PDF Compilation failed");
+                throw new Error("Export failed");
             }
         })
         .then(blob => {
-            // Initiate file download
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            // Generate filename with timestamp
             a.download = `Analytical_Report_${new Date().toISOString().slice(0,10)}.pdf`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
-
-            btn.innerHTML = '<i class="fa-solid fa-download"></i> <span>Generate & Download PDF Report</span>';
-            btn.disabled = false;
-            showSuccessNotification("PDF Report exported successfully!");
+            if (btn) {
+                btn.innerHTML = '<i class="fa-solid fa-file-pdf"></i> <span>PDF Report</span>';
+                btn.disabled = false;
+            }
+            showSuccessNotification('PDF Report exported successfully!');
         })
         .catch(err => {
             console.error(err);
-            alert("Failed to download PDF. Review console logs.");
-            btn.innerHTML = '<i class="fa-solid fa-download"></i> <span>Generate & Download PDF Report</span>';
-            btn.disabled = false;
+            if (btn) {
+                btn.innerHTML = '<i class="fa-solid fa-file-pdf"></i> <span>PDF Report</span>';
+                btn.disabled = false;
+            }
         });
     }
 
     // Toast Alert notification helper
     function showSuccessNotification(msg) {
-        // Look for existing toast container or build one
-        let container = document.querySelector('.toast-container');
-        if(!container) {
+        let container = document.querySelector('.toast-container-center');
+        if (!container) {
             container = document.createElement('div');
-            container.className = "toast-container position-fixed";
-            container.style.zIndex = "99999";
-            container.style.top = "20px";
-            container.style.right = "20px";
+            container.className = 'toast-container-center';
             document.body.appendChild(container);
         }
+
+        container.querySelectorAll('.toast').forEach(t => t.remove());
 
         const toastHtml = `
             <div class="toast align-items-center bg-success text-white border-0 shadow-lg show" role="alert" aria-live="assertive" aria-atomic="true">
                 <div class="d-flex">
-                    <div class="toast-body">
+                    <div class="toast-body text-center w-100 py-2">
                         <i class="fa-solid fa-circle-check me-2"></i>
                         ${msg}
                     </div>

@@ -8,6 +8,36 @@ from services.email_service import email_service
 
 auth_bp = Blueprint("auth", __name__)
 
+EMAIL_OTP_PURPOSES = {"account registration", "account login", "password reset request", "reset"}
+
+
+def _clear_otp_session() -> None:
+    """Remove OTP and legacy OAuth-OTP session keys."""
+    for key in (
+        "otp_purpose",
+        "otp_target_email",
+        "otp_flow",
+        "login_user_id",
+        "login_full_name",
+        "oauth_requires_otp",
+        "oauth_otp_verified",
+    ):
+        session.pop(key, None)
+    session.modified = True
+
+
+def _finalize_oauth_session(pending: dict) -> None:
+    """Complete OAuth sign-in without any verification code."""
+    _clear_otp_session()
+    session.permanent = True
+    session["email"] = pending.get("email")
+    session["user_id"] = pending.get("user_id")
+    session["full_name"] = pending.get("full_name", "")
+    session["picture"] = pending.get("picture", "")
+    session["auth_provider"] = pending.get("auth_provider", "oauth")
+    session.pop("oauth_pending", None)
+    session.modified = True
+
 # ─── Fixed base URL for OAuth redirects (prevents localhost/127.0.0.1 mismatch) ──
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5000").rstrip("/")
 
@@ -20,7 +50,7 @@ google_bp = make_google_blueprint(
     # reprompt_select_account forces Google's native 'Choose an account' dialog every time
     reprompt_select_account=True,
     # redirect_to tells Flask-Dance where to send the user AFTER the OAuth dance completes
-    redirect_to="data.dashboard",
+    redirect_to="auth.oauth_continue",
     # redirect_url explicitly fixes the OAuth callback URL to APP_BASE_URL,
     # so it never changes based on how the app happens to be accessed (localhost vs 127.0.0.1)
     redirect_url=f"{APP_BASE_URL}/login/google/authorized",
@@ -32,7 +62,7 @@ github_bp = make_github_blueprint(
     client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
     scope="user:email",
     # redirect_to tells Flask-Dance where to send the user AFTER the OAuth dance completes
-    redirect_to="data.dashboard",
+    redirect_to="auth.oauth_continue",
     # redirect_url explicitly fixes the OAuth callback URL to APP_BASE_URL
     redirect_url=f"{APP_BASE_URL}/login/github/authorized",
 )
@@ -61,7 +91,6 @@ def google_logged_in(blueprint, token):
             flash("Could not retrieve email from your Google account.", "danger")
             return False
 
-        # Create or update user in DB
         db_user = db_service.create_oauth_user_full(
             email=email,
             provider="google",
@@ -70,18 +99,17 @@ def google_logged_in(blueprint, token):
             provider_id=provider_id,
         )
 
-        # Establish Flask session
-        session.permanent = True
-        session["email"] = email
-        if db_user and db_user.get("id"):
-            session["user_id"] = db_user.get("id")
-        session["full_name"] = full_name
-        session["picture"] = picture
-        session["auth_provider"] = "google"
+        pending = {
+            "email": email,
+            "full_name": full_name,
+            "picture": picture,
+            "auth_provider": "google",
+            "user_id": (db_user or {}).get("id"),
+        }
+        session["oauth_pending"] = pending
         session.modified = True
-
-        flash(f"Welcome, {full_name or email}! Signed in with Google.", "success")
-        return redirect(url_for("data.dashboard"))
+        _clear_otp_session()
+        return redirect(url_for("auth.oauth_continue"))
     except Exception as e:
         flash(f"Google sign-in error: {str(e)}", "danger")
         return redirect(url_for("auth.login"))
@@ -106,25 +134,25 @@ def github_logged_in(blueprint, token):
         picture = user_info.get("avatar_url", "")
         provider_id = str(user_info.get("id", ""))
 
-        # GitHub may not expose email on primary /user endpoint — fetch emails list
         email = (user_info.get("email") or "").strip().lower()
         if not email:
             emails_resp = blueprint.session.get("/user/emails")
             if emails_resp.ok:
-                emails = emails_resp.json()
-                # Pick primary verified email first
-                for e in emails:
-                    if e.get("primary") and e.get("verified"):
-                        email = (e.get("email") or "").strip().lower()
+                emails = emails_resp.json() or []
+                for item in emails:
+                    if item.get("primary") and item.get("verified"):
+                        email = (item.get("email") or "").strip().lower()
                         break
-                if not email and emails:
-                    email = (emails[0].get("email") or "").strip().lower()
+                if not email:
+                    for item in emails:
+                        if item.get("verified"):
+                            email = (item.get("email") or "").strip().lower()
+                            break
 
         if not email:
             flash("Could not retrieve a verified email from your GitHub account.", "danger")
             return redirect(url_for("auth.login"))
 
-        # Create or update user in DB
         db_user = db_service.create_oauth_user_full(
             email=email,
             provider="github",
@@ -133,34 +161,64 @@ def github_logged_in(blueprint, token):
             provider_id=provider_id,
         )
 
-        # Establish Flask session
-        session.permanent = True
-        session["email"] = email
-        if db_user and db_user.get("id"):
-            session["user_id"] = db_user.get("id")
-        session["full_name"] = full_name
-        session["picture"] = picture
-        session["auth_provider"] = "github"
+        pending = {
+            "email": email,
+            "full_name": full_name,
+            "picture": picture,
+            "auth_provider": "github",
+            "user_id": (db_user or {}).get("id"),
+        }
+        session["oauth_pending"] = pending
         session.modified = True
-
-        flash(f"Welcome, {full_name or email}! Signed in with GitHub.", "success")
-        return redirect(url_for("data.dashboard"))
+        _clear_otp_session()
+        return redirect(url_for("auth.oauth_continue"))
     except Exception as e:
         flash(f"GitHub sign-in error: {str(e)}", "danger")
         return redirect(url_for("auth.login"))
 
 
 
+# ─── OAuth Continue / Finalize ───────────────────────────────────────────────
+@auth_bp.route("/oauth-continue")
+def oauth_continue():
+    pending = session.get("oauth_pending")
+    if not pending:
+        if session.get("email"):
+            return redirect(url_for("data.dashboard"))
+        return redirect(url_for("auth.login"))
+
+    _clear_otp_session()
+    return render_template("oauth_continue.html", pending=pending, hide_auth_flashes=True)
+
+
+@auth_bp.route("/oauth-finalize", methods=["POST"])
+def oauth_finalize():
+    """Complete OAuth — no verification code, straight to dashboard."""
+    pending = session.get("oauth_pending")
+    if not pending:
+        if session.get("email"):
+            return redirect(url_for("data.dashboard"))
+        return redirect(url_for("auth.login"))
+
+    _finalize_oauth_session(pending)
+    return redirect(url_for("data.dashboard"))
+
+
 # ─── Login / Register ────────────────────────────────────────────────────────
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
-    if "email" in session:
+    if "email" in session and not session.get("oauth_pending"):
         return redirect(url_for("data.dashboard"))
+
+    if request.method == "GET" and session.get("oauth_pending"):
+        return redirect(url_for("auth.oauth_continue"))
 
     if request.method == "POST":
         action = request.form.get("action")  # 'login' or 'register'
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password")
+
+        _clear_otp_session()
 
         # Backend Validation: Check if email is valid
         if not email or "@" not in email:
@@ -191,16 +249,22 @@ def login():
             session["reg_email"] = email
             session["reg_password"] = password
 
-            # Send OTP
+            # Send OTP for email/password registration only
             otp_code = db_service.create_otp(email, "account registration")
             email_service.send_otp(email, otp_code, "account registration")
 
             session["otp_purpose"] = "account registration"
             session["otp_target_email"] = email
+            session["otp_flow"] = "email"
             session.modified = True
 
-            flash(f"A 4-digit verification code has been sent to {email}.", "info")
-            return render_template("login.html", show_otp_modal=True)
+            return render_template(
+                "login.html",
+                show_otp_modal=True,
+                otp_flow="email",
+                otp_email=email,
+                hide_auth_flashes=True,
+            )
 
         else:  # Login — direct sign-in, no OTP
             if not email or not password:
@@ -231,16 +295,25 @@ def login():
                 flash("Invalid email or password.", "danger")
                 return render_template("login.html", active_tab="login")
 
-            # Valid credentials — log in immediately
-            session.permanent = True
-            session["email"] = email
-            if user and user.get("id"):
-                session["user_id"] = user.get("id")
-            session["full_name"] = user.get("full_name", "")
-            session["auth_provider"] = "email"
+            # Valid credentials — send login OTP for email/password sign-in only
+            otp_code = db_service.create_otp(email, "account login")
+            email_service.send_otp(email, otp_code, "account login")
+
+            session["otp_purpose"] = "account login"
+            session["otp_target_email"] = email
+            session["otp_flow"] = "email"
+            session["login_user_id"] = user.get("id")
+            session["login_full_name"] = user.get("full_name", "")
             session.modified = True
-            flash("Logged in successfully!", "success")
-            return redirect(url_for("data.dashboard"))
+
+            return render_template(
+                "login.html",
+                show_otp_modal=True,
+                active_tab="login",
+                otp_flow="email",
+                otp_email=email,
+                hide_auth_flashes=True,
+            )
 
     return render_template("login.html")
 
@@ -250,6 +323,12 @@ def login():
 def verify_otp():
     purpose = session.get("otp_purpose")
     email = session.get("otp_target_email")
+    otp_flow = session.get("otp_flow", "email")
+    active_tab = "login" if purpose == "account login" else "register"
+
+    if otp_flow != "email" or purpose not in EMAIL_OTP_PURPOSES:
+        flash("Verification is only required for email/password sign-in.", "danger")
+        return redirect(url_for("auth.login"))
 
     # Concatenate 4 digit fields
     digit1 = request.form.get("digit1", "")
@@ -260,8 +339,15 @@ def verify_otp():
     code = f"{digit1}{digit2}{digit3}{digit4}".strip()
 
     if len(code) != 4 or not code.isdigit():
-        flash("Invalid OTP format. Must be a 4-digit code.", "danger")
-        return render_template("login.html", show_otp_modal=True)
+        return render_template(
+            "login.html",
+            show_otp_modal=True,
+            active_tab=active_tab,
+            otp_flow="email",
+            otp_email=email,
+            otp_error="Invalid code format. Please enter all 4 digits.",
+            hide_auth_flashes=True,
+        )
 
     if not email or not purpose:
         flash("Verification session expired. Please try again.", "danger")
@@ -270,19 +356,19 @@ def verify_otp():
     is_valid = db_service.verify_otp(email, code, purpose)
 
     if is_valid:
-        session.pop("test_otp", None)
-
         if purpose == "account registration":
             reg_password = session.get("reg_password")
             full_name = session.get("reg_full_name", "")
             if not reg_password:
                 flash("Registration session expired.", "danger")
+                _clear_otp_session()
                 return redirect(url_for("auth.login"))
 
             user = db_service.create_user(email, reg_password, full_name=full_name)
             session.pop("reg_password", None)
             session.pop("reg_email", None)
             session.pop("reg_full_name", None)
+            _clear_otp_session()
 
             if user:
                 session.permanent = True
@@ -294,25 +380,44 @@ def verify_otp():
                 session.modified = True
                 flash("Account registered and verified successfully!", "success")
                 return redirect(url_for("data.dashboard"))
-            else:
-                flash("Registration failed. Please try again.", "danger")
-                return redirect(url_for("auth.login"))
+            flash("Registration failed. Please try again.", "danger")
+            return redirect(url_for("auth.login"))
 
-        elif purpose == "account login":
+        if purpose == "account login":
+            user = db_service.get_user_by_email(email)
             session.permanent = True
             session["email"] = email
-            session.pop("pre_auth_email", None)
+            session["user_id"] = (user or {}).get("id") or session.get("login_user_id")
+            session["full_name"] = (user or {}).get("full_name") or session.get("login_full_name", "")
+            session["auth_provider"] = "email"
+            _clear_otp_session()
             session.modified = True
             flash("Logged in successfully!", "success")
             return redirect(url_for("data.dashboard"))
 
-        elif purpose in ("password reset request", "reset"):
+        if purpose in ("password reset request", "reset"):
             session["otp_verified_for_reset"] = True
             session.modified = True
             return redirect(url_for("auth.reset_password"))
-    else:
-        flash("Incorrect or expired OTP verification code.", "danger")
-        return render_template("login.html", show_otp_modal=True)
+
+    if purpose == "password reset request":
+        return render_template(
+            "reset.html",
+            show_otp_modal=True,
+            otp_email=email,
+            otp_error="Incorrect or expired verification code. Please try again.",
+            hide_auth_flashes=True,
+        )
+
+    return render_template(
+        "login.html",
+        show_otp_modal=True,
+        active_tab=active_tab,
+        otp_flow="email",
+        otp_email=email,
+        otp_error="Incorrect or expired verification code. Please try again.",
+        hide_auth_flashes=True,
+    )
 
 
 
@@ -335,9 +440,15 @@ def forgot_password():
 
         session["otp_purpose"] = "password reset request"
         session["otp_target_email"] = email
+        session["otp_flow"] = "email"
+        session.modified = True
 
-        flash(f"A 4-digit reset verification code has been sent to {email}.", "info")
-        return render_template("reset.html", show_otp_modal=True)
+        return render_template(
+            "reset.html",
+            show_otp_modal=True,
+            otp_email=email,
+            hide_auth_flashes=True,
+        )
 
     return render_template("reset.html")
 
@@ -366,7 +477,6 @@ def reset_password():
         if success:
             session.pop("otp_verified_for_reset", None)
             session.pop("otp_target_email", None)
-            session.pop("test_otp", None)
             flash("Password updated successfully! Please log in with your new password.", "success")
             return redirect(url_for("auth.login"))
         else:

@@ -97,23 +97,26 @@
         </form>
 
         <!-- Divider -->
-        <div class="relative my-3.5 text-center">
-            <hr class="border-white/[0.06]">
-            <span class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-2.5 bg-[#090d16] text-[10px] font-semibold uppercase tracking-widest text-slate-500">Or continue with</span>
+        <div class="auth-divider my-3.5">
+            <span class="auth-divider-line" aria-hidden="true"></span>
+            <span class="auth-divider-text">Or continue with</span>
+            <span class="auth-divider-line" aria-hidden="true"></span>
         </div>
 
         <!-- Sleek Compact OAuth Buttons (Height: 36px, SVG: 18px) -->
         <div class="flex gap-2">
-            <a href="{{ url_for('google.login') }}" id="btn-google" class="social-pill h-[36px] flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-semibold text-white transition-all hover:bg-white/[0.06] no-underline">
-                <svg class="!w-[18px] !h-[18px] shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="#4285F4" d="M21.6 12.23c0-.79-.07-1.54-.2-2.26H12v4.28h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.24c1.9-1.75 2.98-4.33 2.98-7.54Z"/>
-                    <path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.43l-3.24-2.5c-.9.6-2.05.96-3.37.96-2.59 0-4.79-1.75-5.58-4.1H3.07v2.58A10 10 0 0 0 12 22Z"/>
-                    <path fill="#FBBC05" d="M6.42 13.93A6.02 6.02 0 0 1 6.42 10.07V7.49H3.07a10 10 0 0 0 0 12.88l3.35-2.44Z"/>
-                    <path fill="#EA4335" d="M12 6.07c1.46 0 2.77.5 3.8 1.48l2.85-2.85A9.95 9.95 0 0 0 12 2a10 10 0 0 0-8.93 5.49l3.35 2.58C7.21 7.82 9.41 6.07 12 6.07Z"/>
-                </svg>
+            <a href="{{ url_for('google.login') }}" id="btn-google" onclick="showOAuthLoading(this)" class="social-pill h-[36px] flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-semibold text-white transition-all hover:bg-white/[0.06] no-underline">
+                <span class="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-white shrink-0">
+                    <svg class="!w-[14px] !h-[14px] shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-label="Google" role="img">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                </span>
                 <span>Google</span>
             </a>
-            <a href="{{ url_for('github.login') }}" id="btn-github" class="social-pill h-[36px] flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-semibold text-white transition-all hover:bg-white/[0.06] no-underline">
+            <a href="{{ url_for('github.login') }}" id="btn-github" onclick="showOAuthLoading(this)" class="social-pill h-[36px] flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-semibold text-white transition-all hover:bg-white/[0.06] no-underline">
                 <svg class="!w-[18px] !h-[18px] shrink-0" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
                     <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.3 9.42 7.9 10.95.58.1.79-.25.79-.56v-2.16c-3.21.7-3.89-1.38-3.89-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.41-1.27.74-1.56-2.56-.29-5.25-1.28-5.25-5.71 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.18 1.19a11.06 11.06 0 0 1 5.8 0c2.21-1.5 3.18-1.19 3.18-1.19.63 1.58.23 2.75.11 3.04.74.81 1.19 1.84 1.19 3.1 0 4.44-2.7 5.42-5.27 5.7.42.36.79 1.07.79 2.16v3.2c0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
                 </svg>
@@ -123,53 +126,61 @@
     </div>
 </div>
 
-<!-- 4-Digit OTP Verification Modal (Sleek Dark Glass Container) -->
-{% if show_otp_modal %}
-<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05070c]/85 backdrop-blur-xl">
-    <div class="w-full max-w-[360px] bg-[#0f172a]/95 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col text-center relative overflow-hidden animate-[fadeIn_0.3s_ease]">
+<!-- 4-Digit OTP Verification Modal — email/password only (never for Google/GitHub) -->
+{% if show_otp_modal and otp_flow == 'email' %}
+<div class="otp-modal-overlay">
+    <div class="otp-modal-card">
         
-        <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-cyberCyan/15 border border-cyberCyan/30 flex items-center justify-center text-cyberCyan text-lg shadow-lg shadow-cyberCyan/20">
+        <div class="otp-modal-icon">
             <i class="fa-solid fa-shield-halved"></i>
         </div>
 
-        <h3 class="font-outfit font-bold text-xl text-white mb-1">Security Verification</h3>
-        <p class="text-xs text-slate-400 mb-1">Enter the 4-digit security code sent to your email.</p>
-        <p class="text-[11px] font-semibold text-cyberCyan mb-5 flex items-center justify-center gap-1">
-            <i class="fa-solid fa-clock text-[10px]"></i>
-            <span>Expires in 2 minutes</span>
+        <h3 class="otp-modal-title">Security Verification</h3>
+        <p class="otp-modal-subtitle">
+            Enter the 4-digit code sent to
+            {% if otp_email %}<strong class="otp-modal-email">{{ otp_email }}</strong>{% else %}your email{% endif %}.
+        </p>
+        <p class="otp-modal-expiry">
+            <i class="fa-solid fa-clock"></i>
+            <span>Expires in 10 minutes</span>
         </p>
 
+        {% if otp_error %}
+        <div class="otp-modal-alert otp-modal-alert-error" role="alert">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>{{ otp_error }}</span>
+        </div>
+        {% else %}
+        <div class="otp-modal-alert otp-modal-alert-info" role="status">
+            <i class="fa-solid fa-envelope"></i>
+            <span>Check your inbox and spam folder for the verification code.</span>
+        </div>
+        {% endif %}
+
         <!-- OTP Input Form -->
-        <form action="{{ url_for('auth.verify_otp') }}" method="POST" class="space-y-5">
-            <!-- Glowing Emerald/Cyan 4-Digit Boxes -->
-            <div class="flex justify-center items-center gap-2.5 max-w-xs mx-auto">
-                <input type="text" name="digit1" id="d1" maxlength="1" pattern="[0-9]" required
-                       class="w-12 h-14 text-center font-extrabold text-2xl bg-[#05070c] border-2 border-cyberCyan/30 rounded-xl text-white focus:outline-none focus:border-neonEmerald focus:ring-4 focus:ring-neonEmerald/20 shadow-md shadow-cyberCyan/10 transition-all">
-                <input type="text" name="digit2" id="d2" maxlength="1" pattern="[0-9]" required
-                       class="w-12 h-14 text-center font-extrabold text-2xl bg-[#05070c] border-2 border-cyberCyan/30 rounded-xl text-white focus:outline-none focus:border-neonEmerald focus:ring-4 focus:ring-neonEmerald/20 shadow-md shadow-cyberCyan/10 transition-all">
-                <input type="text" name="digit3" id="d3" maxlength="1" pattern="[0-9]" required
-                       class="w-12 h-14 text-center font-extrabold text-2xl bg-[#05070c] border-2 border-cyberCyan/30 rounded-xl text-white focus:outline-none focus:border-neonEmerald focus:ring-4 focus:ring-neonEmerald/20 shadow-md shadow-cyberCyan/10 transition-all">
-                <input type="text" name="digit4" id="d4" maxlength="1" pattern="[0-9]" required
-                       class="w-12 h-14 text-center font-extrabold text-2xl bg-[#05070c] border-2 border-cyberCyan/30 rounded-xl text-white focus:outline-none focus:border-neonEmerald focus:ring-4 focus:ring-neonEmerald/20 shadow-md shadow-cyberCyan/10 transition-all">
+        <form action="{{ url_for('auth.verify_otp') }}" method="POST" class="otp-modal-form">
+            <div class="otp-digit-row">
+                <input type="text" name="digit1" id="d1" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="one-time-code" required class="otp-digit-input">
+                <input type="text" name="digit2" id="d2" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
+                <input type="text" name="digit3" id="d3" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
+                <input type="text" name="digit4" id="d4" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
             </div>
 
-            <!-- Spam/junk folder hint -->
-            <p class="text-[11px] text-slate-400 text-center px-2 leading-relaxed">
-                <i class="fa-solid fa-circle-info text-cyberCyan/70 mr-1"></i>
-                Didn't receive the code? It may take a few minutes to arrive. Please also check your <strong class="text-slate-300">spam or junk folder</strong>.
-            </p>
-
-            <button type="submit" class="w-full h-[40px] bg-gradient-to-r from-cyberCyan to-neonEmerald border-0 text-[#05070c] font-bold font-outfit text-xs rounded-xl hover:brightness-110 shadow-lg shadow-cyberCyan/20 transition-all">
-                Verify & Continue
+            <button type="submit" class="otp-modal-submit">
+                Verify &amp; Continue
             </button>
         </form>
 
-        <div class="mt-4 text-xs text-slate-400">
-            Didn't receive code? <a href="#" class="text-cyberCyan hover:underline font-semibold" onclick="location.reload();">Resend Code</a>
+        <p class="otp-modal-footnote">
+            Didn't receive the code? It may take a few minutes. Also check your <strong>spam or junk folder</strong>.
+        </p>
+
+        <div class="otp-modal-resend">
+            Didn't receive code? <a href="{{ url_for('auth.login') }}">Back to sign in</a>
         </div>
         
-        <button type="button" class="absolute top-3.5 right-3.5 text-slate-500 hover:text-white transition-all" data-go-to="{{ url_for('auth.login') }}">
-            <i class="fa-solid fa-xmark text-lg"></i>
+        <button type="button" class="otp-modal-close" data-go-to="{{ url_for('auth.login') }}" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
         </button>
     </div>
 </div>
@@ -264,20 +275,30 @@
         return true;
     }
 
+    function showOAuthLoading(el) {
+        if (!el) return true;
+        el.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Connecting...</span>';
+        el.classList.add('pointer-events-none', 'opacity-80');
+        return true;
+    }
+
     function showToast(message, type) {
-        let container = document.querySelector('.toast-container');
+        let container = document.querySelector('.toast-container-center');
         if (!container) {
             container = document.createElement('div');
-            container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-            container.style.zIndex = '1050';
+            container.className = 'toast-container-center';
             document.body.appendChild(container);
         }
 
+        container.querySelectorAll('.toast').forEach(t => t.remove());
+
+        const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+        const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
         const toastHtml = `
-            <div class="toast align-items-center bg-danger text-white border-0 shadow-2xl show" role="alert">
+            <div class="toast align-items-center ${bgClass} text-white border-0 shadow-2xl show" role="alert">
                 <div class="d-flex">
-                    <div class="toast-body font-medium text-xs">
-                        <i class="fa-solid fa-circle-exclamation me-2"></i> ${message}
+                    <div class="toast-body font-medium text-xs text-center w-100 py-2">
+                        <i class="fa-solid ${icon} me-2"></i> ${message}
                     </div>
                     <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
                 </div>

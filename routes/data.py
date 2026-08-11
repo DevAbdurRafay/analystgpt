@@ -77,7 +77,6 @@ def dashboard():
         has_dataset=has_dataset, 
         diagnostics=diagnostics,
         email=session.get("email"),
-        test_otp=session.get("test_otp")  # OTP debug helper in UI
     )
 
 @data_bp.route("/upload", methods=["POST"])
@@ -269,214 +268,132 @@ def export_pdf():
     except ImportError:
         return jsonify({"error": "PDF generation library (reportlab) not installed."}), 500
 
+    # ── Safe text helper ─────────────────────────────────────────────────────
+    import xml.sax.saxutils as saxutils
+    import html as html_module
+
+    def safe_para(text, style):
+        """Escape special XML chars so ReportLab's Paragraph never crashes."""
+        if not text:
+            text = ""
+        # Decode HTML entities first so &amp; in source does not become literal &amp;
+        decoded = html_module.unescape(str(text))
+        safe = saxutils.escape(decoded)
+        # Restore basic allowed HTML tags ReportLab supports
+        safe = safe.replace("&lt;br/&gt;", "<br/>").replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+        try:
+            return Paragraph(safe, style)
+        except Exception:
+            return Paragraph(saxutils.escape(decoded), style)
+
     # Parse JSON body
     post_data = request.json or {}
     notes = post_data.get("notes", "")
     chat_history = post_data.get("chat_history", [])
     charts = post_data.get("charts", [])
-    
+
     try:
         df = pd.read_csv(dataset_path)
         diagnostics = DataCleaner.get_diagnostics(df)
     except Exception as e:
         return jsonify({"error": f"Could not load data: {str(e)}"}), 500
 
-    # Generate PDF in memory buffer
     buffer = BytesIO()
     doc = SimpleDocTemplate(
-        buffer, 
+        buffer,
         pagesize=letter,
         rightMargin=40, leftMargin=40,
         topMargin=45, bottomMargin=45
     )
 
     styles = getSampleStyleSheet()
-    
-    # Custom Palette Styling for PDF (Professional dark-themed accent header)
     primary_color = colors.HexColor("#0B0F19")
     accent_color = colors.HexColor("#10B981")
     text_color = colors.HexColor("#1E293B")
-    
-    # Custom paragraph styles
-    title_style = ParagraphStyle(
-        'DocTitle',
-        parent=styles['Heading1'],
-        fontName='Helvetica-Bold',
-        fontSize=24,
-        textColor=primary_color,
-        spaceAfter=15
-    )
-    
-    subtitle_style = ParagraphStyle(
-        'DocSubtitle',
-        parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=10,
-        textColor=colors.HexColor("#64748B"),
-        spaceAfter=25
-    )
-    
-    h2_style = ParagraphStyle(
-        'SectionHeader',
-        parent=styles['Heading2'],
-        fontName='Helvetica-Bold',
-        fontSize=14,
-        textColor=colors.HexColor("#111827"),
-        spaceBefore=15,
-        spaceAfter=10,
-        borderColor=accent_color,
-        borderWidth=1,
-        borderRadius=2,
-        borderPadding=5,
-        backColor=colors.HexColor("#F8FAFC")
-    )
-    
-    body_style = ParagraphStyle(
-        'DocBody',
-        parent=styles['BodyText'],
-        fontName='Helvetica',
-        fontSize=10,
-        textColor=text_color,
-        spaceAfter=8,
-        leading=14
-    )
-    
-    chat_user_style = ParagraphStyle(
-        'ChatUser',
-        parent=styles['BodyText'],
-        fontName='Helvetica-Bold',
-        fontSize=10,
-        textColor=colors.HexColor("#0284C7"),
-        spaceBefore=8,
-        spaceAfter=3
-    )
 
-    chat_ai_style = ParagraphStyle(
-        'ChatAI',
-        parent=styles['BodyText'],
-        fontName='Helvetica',
-        fontSize=10,
-        textColor=colors.HexColor("#0F172A"),
-        spaceAfter=12,
-        leading=14,
-        backColor=colors.HexColor("#F1F5F9"),
-        borderPadding=8,
-        borderRadius=4
-    )
+    title_style = ParagraphStyle('DocTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=24, textColor=primary_color, spaceAfter=15)
+    subtitle_style = ParagraphStyle('DocSubtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor("#64748B"), spaceAfter=25)
+    h2_style = ParagraphStyle('SectionHeader', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=14, textColor=colors.HexColor("#111827"), spaceBefore=15, spaceAfter=10, borderColor=accent_color, borderWidth=1, borderRadius=2, borderPadding=5, backColor=colors.HexColor("#F8FAFC"))
+    body_style = ParagraphStyle('DocBody', parent=styles['BodyText'], fontName='Helvetica', fontSize=10, textColor=text_color, spaceAfter=8, leading=14)
+    chat_user_style = ParagraphStyle('ChatUser', parent=styles['BodyText'], fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor("#0284C7"), spaceBefore=8, spaceAfter=3)
+    chat_ai_style = ParagraphStyle('ChatAI', parent=styles['BodyText'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor("#0F172A"), spaceAfter=12, leading=14, backColor=colors.HexColor("#F1F5F9"), borderPadding=8, borderRadius=4)
 
     story = []
 
-    # Title & Metadata
-    story.append(Paragraph("AI-Powered Data Analysis Report", title_style))
-    story.append(Paragraph(f"Generated for: {session['email']} | Date: {datetime.datetime.now().strftime('%B %d, %Y, %H:%M:%S')}", subtitle_style))
+    story.append(safe_para("AI-Powered Data Analysis Report", title_style))
+    story.append(safe_para(f"Generated for: {session['email']} | Date: {datetime.datetime.now().strftime('%B %d, %Y, %H:%M:%S')}", subtitle_style))
     story.append(Spacer(1, 10))
 
-    # User Executive Notes
     if notes:
-        story.append(Paragraph("Executive Summary & Notes", h2_style))
-        story.append(Paragraph(notes.replace('\n', '<br/>'), body_style))
+        story.append(safe_para("Executive Summary & Notes", h2_style))
+        story.append(safe_para(notes, body_style))
         story.append(Spacer(1, 15))
 
-    # Dataset Diagnostics Info
-    story.append(Paragraph("Dataset Profile Diagnostics", h2_style))
+    story.append(safe_para("Dataset Profile Diagnostics", h2_style))
     diag_data = [
-        [Paragraph("<b>Metric</b>", body_style), Paragraph("<b>Value</b>", body_style)],
-        [Paragraph("Total Rows", body_style), Paragraph(str(diagnostics["row_count"]), body_style)],
-        [Paragraph("Total Columns", body_style), Paragraph(str(diagnostics["col_count"]), body_style)],
-        [Paragraph("Total Missing Cells", body_style), Paragraph(str(sum(diagnostics["null_counts"].values())), body_style)]
+        [safe_para("<b>Metric</b>", body_style), safe_para("<b>Value</b>", body_style)],
+        [safe_para("Total Rows", body_style), safe_para(str(diagnostics["row_count"]), body_style)],
+        [safe_para("Total Columns", body_style), safe_para(str(diagnostics["col_count"]), body_style)],
+        [safe_para("Total Missing Cells", body_style), safe_para(str(sum(diagnostics["null_counts"].values())), body_style)]
     ]
     diag_table = Table(diag_data, colWidths=[200, 300])
-    diag_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-        ('TOPPADDING', (0,0), (-1,-1), 6),
-    ]))
+    diag_table.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")), ('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
     story.append(diag_table)
     story.append(Spacer(1, 15))
 
-    # Columns list Table
-    story.append(Paragraph("Dataset Columns Schema", body_style))
-    col_headers = [Paragraph("<b>Column Name</b>", body_style), Paragraph("<b>Data Type</b>", body_style), Paragraph("<b>Missing Values</b>", body_style)]
+    story.append(safe_para("Dataset Columns Schema", body_style))
+    col_headers = [safe_para("<b>Column Name</b>", body_style), safe_para("<b>Data Type</b>", body_style), safe_para("<b>Missing</b>", body_style), safe_para("<b>Unique</b>", body_style)]
     col_rows = []
     for col in diagnostics["columns"]:
+        profile = diagnostics.get("column_profiles", {}).get(col, {})
         col_rows.append([
-            Paragraph(col, body_style),
-            Paragraph(diagnostics["dtypes"].get(col, "unknown"), body_style),
-            Paragraph(str(diagnostics["null_counts"].get(col, 0)), body_style)
+            safe_para(col, body_style),
+            safe_para(diagnostics["dtypes"].get(col, "unknown"), body_style),
+            safe_para(f"{profile.get('nulls', 0)} ({profile.get('null_pct', 0)}%)", body_style),
+            safe_para(str(profile.get('unique', '—')), body_style)
         ])
-    
-    schema_table_data = [col_headers] + col_rows[:15] # Cap at 15 for space
-    if len(col_rows) > 15:
-        schema_table_data.append([Paragraph("<i>... and details for remaining columns omitted for brevity</i>", body_style), "", ""])
-        
-    schema_table = Table(schema_table_data, colWidths=[230, 150, 120])
-    schema_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F1F5F9")),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F8FAFC")]),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-    ]))
+    schema_table_data = [col_headers] + col_rows[:20]
+    if len(col_rows) > 20:
+        schema_table_data.append([safe_para("<i>... remaining columns omitted for brevity</i>", body_style), "", "", ""])
+    schema_table = Table(schema_table_data, colWidths=[190, 110, 90, 70])
+    schema_table.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F1F5F9")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F8FAFC")]), ('BOTTOMPADDING', (0,0), (-1,-1), 4), ('TOPPADDING', (0,0), (-1,-1), 4)]))
     story.append(schema_table)
     story.append(Spacer(1, 20))
 
-    # Add pagebreak before visualizations and chats
     story.append(PageBreak())
 
-    # Visualizations
     if charts:
-        story.append(Paragraph("Data Visualizations & Graphics", h2_style))
+        story.append(safe_para("Data Visualizations & Graphics", h2_style))
         for idx, chart in enumerate(charts):
-            story.append(Paragraph(f"<b>Figure {idx+1}: {chart.get('title', 'Analysis Chart')}</b>", body_style))
-            
-            # Decode the base64 png
+            story.append(safe_para(f"<b>Figure {idx+1}: {chart.get('title', 'Analysis Chart')}</b>", body_style))
             img_data_b64 = chart.get("image", "")
             if img_data_b64 and "," in img_data_b64:
                 try:
                     raw_data = base64.b64decode(img_data_b64.split(",")[1])
                     img_io = BytesIO(raw_data)
-                    # ReportLab Image. Width = 500, Height = 280 roughly maintains a dashboard widescreen layout
                     pdf_img = Image(img_io, width=500, height=280)
                     story.append(pdf_img)
                     story.append(Spacer(1, 10))
                 except Exception as ex:
-                    story.append(Paragraph(f"<i>Could not render image: {str(ex)}</i>", body_style))
-            
+                    story.append(safe_para(f"<i>Could not render image: {str(ex)}</i>", body_style))
             explanation = chart.get("explanation", "")
             if explanation:
-                # Basic markdown conversion (replace bold and code tags simple)
-                exp_html = explanation.replace("**", "<b>").replace("__", "<b>")
-                exp_html = exp_html.replace("`", "<code>")
-                exp_html = exp_html.replace("\n", "<br/>")
-                story.append(Paragraph(f"<b>AI Insight:</b> {exp_html}", body_style))
+                story.append(safe_para(f"<b>AI Insight:</b> {explanation}", body_style))
                 story.append(Spacer(1, 15))
             story.append(Spacer(1, 10))
 
-    # Chat Log Section
     if chat_history:
-        story.append(Paragraph("AI Analytical Dialogue Transcript", h2_style))
+        story.append(safe_para("AI Analytical Dialogue Transcript", h2_style))
         for msg in chat_history:
             sender = msg.get("sender", "user")
             text = msg.get("text", "")
-            
-            # Simple markup formatting for reportlab Paragraph
-            text_html = text.replace("**", "<b>").replace("__", "<b>").replace("`", "<code>")
-            text_html = text_html.replace("\n", "<br/>")
-            
             if sender == "user":
-                story.append(Paragraph(f"<b>Query:</b> {text_html}", chat_user_style))
+                story.append(safe_para(f"<b>Query:</b> {text}", chat_user_style))
             else:
-                story.append(Paragraph(f"<b>Response:</b><br/>{text_html}", chat_ai_style))
+                story.append(safe_para(f"<b>Response:</b><br/>{text}", chat_ai_style))
             story.append(Spacer(1, 4))
 
-    # Build document
     doc.build(story)
-    
     buffer.seek(0)
-    return send_file(
-        buffer, 
-        as_attachment=True, 
-        download_name=f"Data_Analysis_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-        mimetype="application/pdf"
-    )
+    return send_file(buffer, as_attachment=True, download_name=f"Data_Analysis_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf", mimetype="application/pdf")
+

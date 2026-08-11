@@ -8,6 +8,34 @@ from routes.data import get_dataset_path
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/ai")
 
+
+@ai_bp.route("/history", methods=["GET"])
+def history():
+    if "email" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    user_id = session.get("user_id")
+    if not user_id and session.get("email"):
+        u = db_service.get_user_by_email(session.get("email"))
+        if u:
+            user_id = u.get("id")
+            session["user_id"] = user_id
+
+    if not user_id:
+        return jsonify({"messages": []})
+
+    messages = db_service.get_chat_messages(user_id)
+    formatted = []
+    for msg in messages:
+        formatted.append({
+            "sender": msg.get("sender", "user"),
+            "text": msg.get("content", ""),
+            "chart_type": msg.get("chart_type"),
+            "chart_data": msg.get("chart_data"),
+        })
+    return jsonify({"messages": formatted})
+
+
 @ai_bp.route("/query", methods=["POST"])
 def query():
     if "email" not in session:

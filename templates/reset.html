@@ -102,40 +102,43 @@
 
 <!-- Step 2: 4-Digit OTP Verification Modal -->
 {% if show_otp_modal %}
-<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05070c]/85 backdrop-blur-xl">
-    <div class="w-full max-w-md backdrop-blur-2xl bg-[#090d16]/90 border border-white/[0.12] rounded-3xl p-8 shadow-2xl flex flex-col text-center relative overflow-hidden animate-[fadeIn_0.3s_ease]">
+<div class="otp-modal-overlay">
+    <div class="otp-modal-card">
         
-        <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-cyberCyan/10 border border-cyberCyan/20 flex items-center justify-center text-cyberCyan text-2xl shadow-lg shadow-cyberCyan/10">
+        <div class="otp-modal-icon">
             <i class="fa-solid fa-key"></i>
         </div>
 
-        <h3 class="font-outfit font-bold text-2xl text-white mb-2">Reset Verification</h3>
-        <p class="text-sm text-slate-400 mb-8">Enter the 4-digit recovery code sent to your email to verify password reset.</p>
+        <h3 class="otp-modal-title">Reset Verification</h3>
+        <p class="otp-modal-subtitle">
+            Enter the 4-digit recovery code sent to
+            {% if otp_email %}<strong class="otp-modal-email">{{ otp_email }}</strong>{% else %}your email{% endif %}.
+        </p>
 
-        <!-- OTP Input Form -->
-        <form action="{{ url_for('auth.verify_otp') }}" method="POST" class="space-y-8">
-            <div class="flex justify-center items-center gap-3 max-w-xs mx-auto">
-                <input type="text" name="digit1" id="d1" maxlength="1" pattern="[0-9]" required
-                       class="w-14 h-16 text-center font-extrabold text-2xl bg-white/[0.04] border border-white/[0.1] rounded-2xl text-white focus:outline-none focus:border-cyberCyan focus:ring-2 focus:ring-cyberCyan/30 transition-all">
-                <input type="text" name="digit2" id="d2" maxlength="1" pattern="[0-9]" required
-                       class="w-14 h-16 text-center font-extrabold text-2xl bg-white/[0.04] border border-white/[0.1] rounded-2xl text-white focus:outline-none focus:border-cyberCyan focus:ring-2 focus:ring-cyberCyan/30 transition-all">
-                <input type="text" name="digit3" id="d3" maxlength="1" pattern="[0-9]" required
-                       class="w-14 h-16 text-center font-extrabold text-2xl bg-white/[0.04] border border-white/[0.1] rounded-2xl text-white focus:outline-none focus:border-cyberCyan focus:ring-2 focus:ring-cyberCyan/30 transition-all">
-                <input type="text" name="digit4" id="d4" maxlength="1" pattern="[0-9]" required
-                       class="w-14 h-16 text-center font-extrabold text-2xl bg-white/[0.04] border border-white/[0.1] rounded-2xl text-white focus:outline-none focus:border-cyberCyan focus:ring-2 focus:ring-cyberCyan/30 transition-all">
+        {% if otp_error %}
+        <div class="otp-modal-alert otp-modal-alert-error" role="alert">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>{{ otp_error }}</span>
+        </div>
+        {% endif %}
+
+        <form action="{{ url_for('auth.verify_otp') }}" method="POST" class="otp-modal-form">
+            <div class="otp-digit-row">
+                <input type="text" name="digit1" id="d1" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
+                <input type="text" name="digit2" id="d2" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
+                <input type="text" name="digit3" id="d3" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
+                <input type="text" name="digit4" id="d4" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
             </div>
 
-            <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-cyberCyan to-neonEmerald border-0 text-[#05070c] font-bold font-outfit text-base rounded-xl hover:brightness-110 shadow-lg shadow-cyberCyan/20 transition-all">
-                Verify Code
-            </button>
+            <button type="submit" class="otp-modal-submit">Verify Code</button>
         </form>
 
-        <div class="mt-6 text-sm text-slate-400">
-            Didn't receive code? <a href="#" class="text-cyberCyan hover:underline font-semibold" onclick="location.reload();">Resend Code</a>
+        <div class="otp-modal-resend">
+            Didn't receive code? <a href="{{ url_for('auth.forgot_password') }}">Request again</a>
         </div>
         
-        <button type="button" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-all" data-go-to="{{ url_for('auth.forgot_password') }}">
-            <i class="fa-solid fa-xmark text-xl"></i>
+        <button type="button" class="otp-modal-close" data-go-to="{{ url_for('auth.forgot_password') }}" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
         </button>
     </div>
 </div>

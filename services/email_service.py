@@ -13,7 +13,7 @@ MAIL_USE_TLS  = os.getenv("MAIL_USE_TLS",  "True").lower() not in ("false", "0",
 MAIL_USERNAME = os.getenv("MAIL_USERNAME") or os.getenv("SMTP_USER")
 MAIL_PASSWORD = os.getenv("MAIL_PASSWORD") or os.getenv("SMTP_PASSWORD")
 # Set exact Sender Name & Address to prevent spam flags
-MAIL_FROM     = "AnalystGPT Security <analysis.workforce@gmail.com>"
+MAIL_FROM     = "AnalystGPT <analysis.workforce@gmail.com>"
 
 
 def _build_html_email(code: str, purpose: str) -> str:
@@ -61,7 +61,7 @@ def _build_html_email(code: str, purpose: str) -> str:
               </h2>
               <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;line-height:1.6;">
                 Use the 4-digit security code below to complete your <strong style="color:#f1f5f9;">{purpose}</strong>.
-                This code will expire in <strong style="color:#06B6D4;">2 minutes</strong>.
+                This code will expire in <strong style="color:#06B6D4;">10 minutes</strong>.
               </p>
 
               <!-- OTP 4-Digit Row Container (Strict Single Row) -->
@@ -76,6 +76,9 @@ def _build_html_email(code: str, purpose: str) -> str:
               <p style="margin:0 0 4px;color:#64748b;font-size:12px;line-height:1.5;">
                 If you did not request this verification code, please safely disregard this email.
               </p>
+              <p style="margin:12px 0 0;color:#64748b;font-size:11px;line-height:1.5;">
+                This is an automated message from AnalystGPT — please do not reply.
+              </p>
             </td>
           </tr>
           <!-- Footer -->
@@ -83,7 +86,7 @@ def _build_html_email(code: str, purpose: str) -> str:
             <td style="padding:20px 32px;border-top:1px solid rgba(255,255,255,0.06);
                        background:#070a11;text-align:center;">
               <p style="margin:0;color:#475569;font-size:11px;">
-                &copy; 2026 AnalystGPT Security System &nbsp;&bull;&nbsp; All rights reserved
+                &copy; 2026 AnalystGPT &nbsp;&bull;&nbsp; Automated security message
               </p>
             </td>
           </tr>
@@ -99,13 +102,14 @@ class EmailService:
     @staticmethod
     def _dispatch_smtp(email: str, code: str, purpose: str):
         """Internal worker function executed in background thread."""
-        subject = "Your AnalystGPT Security Verification Code"
+        subject = "Your AnalystGPT verification code"
         plain_body = (
             f"Hello,\n\n"
             f"Your 4-digit security verification code is: {code}\n\n"
-            f"This code was generated for {purpose}. It expires in 2 minutes.\n"
+            f"This code was generated for {purpose}. It expires in 10 minutes.\n"
             f"If you did not request this code, please safely ignore this email.\n\n"
-            f"Best regards,\nAnalystGPT Security Team"
+            f"This is an automated message from AnalystGPT — please do not reply.\n\n"
+            f"Best regards,\nAnalystGPT"
         )
 
         # Print to console for debugging log

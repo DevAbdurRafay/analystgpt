@@ -119,17 +119,30 @@ def create_app():
 
     @app.before_request
     def normalize_host():
-
-        """Redirects 127.0.0.1 to localhost (or vice-versa) based on APP_BASE_URL to avoid OAuth cookie domain mismatches."""
+        """Redirects localhost/127.0.0.1 to the configured APP_BASE_URL while avoiding self-redirect loops."""
         app_base_url = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
         if not app_base_url:
             return
         from urllib.parse import urlparse
+
+        def normalize_host_value(host):
+            if not host:
+                return ""
+            host = host.lower().strip().rstrip("/")
+            if host.startswith("[") and "]" in host:
+                host = host.split("]", 1)[0].strip("[]") + host.split("]", 1)[1]
+            if host.count(":") == 1 and host.rsplit(":", 1)[1].isdigit():
+                return host.rsplit(":", 1)[0]
+            return host
+
         parsed_base = urlparse(app_base_url)
         target_host = parsed_base.netloc
         current_host = request.host
-        if target_host and current_host and current_host != target_host:
-            if ("localhost" in current_host or "127.0.0.1" in current_host) and ("localhost" in target_host or "127.0.0.1" in target_host):
+        current_norm = normalize_host_value(current_host)
+        target_norm = normalize_host_value(target_host)
+
+        if target_host and current_host and current_norm != target_norm:
+            if ("localhost" in current_norm or "127.0.0.1" in current_norm) and ("localhost" in target_norm or "127.0.0.1" in target_norm):
                 new_url = request.url.replace(f"://{current_host}", f"://{target_host}", 1)
                 return redirect(new_url, code=307)
 
@@ -137,19 +150,19 @@ def create_app():
     def index():
 
         if "email" not in session:
-            return redirect(url_for("auth.login"))
+            return redirect("/login")
         return redirect(url_for("data.dashboard"))
 
     @app.route("/dashboard")
     def dashboard_page():
         if "email" not in session:
-            return redirect(url_for("auth.login"))
+            return redirect("/login")
         return redirect(url_for("data.dashboard"))
 
     @app.route("/analytics")
     def analytics_page():
         if "email" not in session:
-            return redirect(url_for("auth.login"))
+            return redirect("/login")
         return render_template(
             "analytics.html",
             email=session.get("email"),
@@ -159,7 +172,7 @@ def create_app():
     @app.route("/chat")
     def chat_page():
         if "email" not in session:
-            return redirect(url_for("auth.login"))
+            return redirect("/login")
         return render_template(
             "chat.html",
             email=session.get("email"),

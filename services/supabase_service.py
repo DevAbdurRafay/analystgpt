@@ -296,9 +296,9 @@ class DBService:
         return code
 
     def verify_otp(self, email, code, purpose):
-        """Verifies a 4-digit OTP code in Supabase with robust timezone handling"""
+        """Verifies a 4-digit OTP code in Supabase with robust timezone handling."""
         email = email.lower().strip()
-        code = str(code).strip()
+        code = str(code).strip().zfill(4)
         now = datetime.datetime.now(datetime.timezone.utc)
 
         conn = self.get_db_conn()
@@ -315,7 +315,7 @@ class DBService:
                 )
                 row = cur.fetchone()
                 if row:
-                    stored_code = str(row.get("code", "")).strip()
+                    stored_code = str(row.get("code", "")).strip().zfill(4)
                     exp_time = row.get("expires_at")
                     if exp_time:
                         if exp_time.tzinfo is None:
@@ -337,10 +337,22 @@ class DBService:
             return False
 
         try:
-            res = client.table("otps").select("*").eq("email", email).eq("purpose", purpose).eq("verified", False).order("created_at", desc=True).limit(1).execute()
-            if res.data and len(res.data) > 0:
-                record = res.data[0]
-                stored_code = str(record.get("code", "")).strip()
+            res = (
+                client.table("otps")
+                .select("*")
+                .eq("purpose", purpose)
+                .eq("verified", False)
+                .order("created_at", desc=True)
+                .limit(20)
+                .execute()
+            )
+            records = res.data or []
+            record = next(
+                (row for row in records if str(row.get("email", "")).lower().strip() == email),
+                None,
+            )
+            if record:
+                stored_code = str(record.get("code", "")).strip().zfill(4)
                 exp_str = record.get("expires_at")
                 if exp_str:
                     try:
@@ -502,6 +514,55 @@ class DBService:
         except Exception as e:
             print(f"Error saving chat message in Supabase REST: {e}")
             return None
+
+    def get_chat_messages(self, user_id, limit=200):
+        """Return chat messages for the user's latest session, oldest first."""
+        if not user_id:
+            return []
+
+        session_row = self.get_or_create_chat_session(user_id)
+        if not session_row or not session_row.get("id"):
+            return []
+
+        session_id = session_row["id"]
+        conn = self.get_db_conn()
+        if conn:
+            try:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute(
+                    """
+                    SELECT sender, content, chart_type, chart_data, created_at
+                    FROM chat_messages
+                    WHERE session_id = %s
+                    ORDER BY created_at ASC
+                    LIMIT %s
+                    """,
+                    (session_id, limit),
+                )
+                rows = cur.fetchall()
+                conn.close()
+                return [dict(row) for row in rows]
+            except Exception as e:
+                print(f"Direct SQL get_chat_messages failed: {e}")
+                if conn:
+                    conn.close()
+
+        client = self.get_client()
+        if not client:
+            return []
+        try:
+            res = (
+                client.table("chat_messages")
+                .select("sender, content, chart_type, chart_data, created_at")
+                .eq("session_id", session_id)
+                .order("created_at")
+                .limit(limit)
+                .execute()
+            )
+            return res.data or []
+        except Exception as e:
+            print(f"Error in get_chat_messages REST: {e}")
+            return []
 
     def save_dataset_upload(self, user_id, original_name, row_count, col_count, file_size_bytes, columns, dtypes):
         """Save dataset upload metadata in dataset_uploads table in Supabase."""
