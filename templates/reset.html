@@ -27,11 +27,11 @@
 
         {% if session.get('otp_verified_for_reset') %}
             <!-- Step 3: Enter New Password -->
-            <form action="{{ url_for('auth.reset_password') }}" method="POST" class="space-y-6">
+            <form action="{{ url_for('auth.reset_password') }}" method="POST" class="auth-form" onsubmit="return handleResetSubmit(event)">
                 <!-- New Password -->
-                <div class="space-y-2">
+                <div class="password-field-group">
                     <label for="password" class="text-xs font-semibold uppercase tracking-wider text-slate-400">New Password</label>
-                    <div class="relative">
+                    <div class="relative password-input-wrap">
                         <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
                             <i class="fa-solid fa-lock"></i>
                         </span>
@@ -44,12 +44,23 @@
                             </svg>
                         </button>
                     </div>
+                    <div id="password-strength-wrap" class="password-strength hidden" aria-hidden="true">
+                        <div class="password-strength-steps" role="meter" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0">
+                            <span class="password-strength-step"></span>
+                            <span class="password-strength-step"></span>
+                            <span class="password-strength-step"></span>
+                            <span class="password-strength-step"></span>
+                        </div>
+                        <div class="password-strength-meta">
+                            <span id="password-strength-label" class="password-strength-label"></span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Confirm Password -->
-                <div class="space-y-2">
+                <div class="password-field-group confirm-password-field">
                     <label for="confirm_password" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Confirm Password</label>
-                    <div class="relative">
+                    <div class="relative password-input-wrap">
                         <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
                             <i class="fa-solid fa-shield"></i>
                         </span>
@@ -99,56 +110,32 @@
         {% endif %}
     </div>
 </div>
-
-<!-- Step 2: 4-Digit OTP Verification Modal -->
-{% if show_otp_modal %}
-<div class="otp-modal-overlay">
-    <div class="otp-modal-card">
-        
-        <div class="otp-modal-icon">
-            <i class="fa-solid fa-key"></i>
-        </div>
-
-        <h3 class="otp-modal-title">Reset Verification</h3>
-        <p class="otp-modal-subtitle">
-            Enter the 4-digit recovery code sent to
-            {% if otp_email %}<strong class="otp-modal-email">{{ otp_email }}</strong>{% else %}your email{% endif %}.
-        </p>
-
-        {% if otp_error %}
-        <div class="otp-modal-alert otp-modal-alert-error" role="alert">
-            <i class="fa-solid fa-circle-exclamation"></i>
-            <span>{{ otp_error }}</span>
-        </div>
-        {% endif %}
-
-        <form action="{{ url_for('auth.verify_otp') }}" method="POST" class="otp-modal-form">
-            <div class="otp-digit-row">
-                <input type="text" name="digit1" id="d1" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
-                <input type="text" name="digit2" id="d2" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
-                <input type="text" name="digit3" id="d3" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
-                <input type="text" name="digit4" id="d4" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
-            </div>
-
-            <button type="submit" class="otp-modal-submit">Verify Code</button>
-        </form>
-
-        <div class="otp-modal-resend">
-            Didn't receive code? <a href="{{ url_for('auth.forgot_password') }}">Request again</a>
-        </div>
-        
-        <button type="button" class="otp-modal-close" data-go-to="{{ url_for('auth.forgot_password') }}" aria-label="Close">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-    </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/auth-validation.js') }}"></script>
 <script>
     const EYE_OPEN_SVG = `<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />`;
     const EYE_CLOSED_SVG = `<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a10.046 10.046 0 013.682-.813c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m-4.276-4.276a3 3 0 00-4.243-4.243M3 3l18 18" />`;
+
+    function handleResetSubmit(e) {
+        const pass = document.getElementById('password')?.value || '';
+        const confirmPass = document.getElementById('confirm_password')?.value || '';
+
+        if (window.AuthValidation && !AuthValidation.isValidPassword(pass)) {
+            e.preventDefault();
+            alert('Password must include uppercase, lowercase, a number, and a special character.');
+            return false;
+        }
+
+        if (pass !== confirmPass) {
+            e.preventDefault();
+            alert('Passwords do not match.');
+            return false;
+        }
+
+        return true;
+    }
 
     function togglePasswordVisibility(inputId, btn) {
         const input = document.getElementById(inputId);
@@ -167,6 +154,11 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        const passInput = document.getElementById('password');
+        if (window.AuthValidation && passInput) {
+            AuthValidation.bindPasswordStrength(passInput);
+        }
+
         document.querySelectorAll('[data-go-to]').forEach((button) => {
             button.addEventListener('click', () => {
                 const target = button.getAttribute('data-go-to');

@@ -3,12 +3,45 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_dance.contrib.google import make_google_blueprint, google
 from flask_dance.contrib.github import make_github_blueprint, github
 from flask_dance.consumer import oauth_authorized
-from services.supabase_service import db_service
+from services.supabase_service import db_service, OTP_EXPIRY_MINUTES
 from services.email_service import email_service
+from services.validators import (
+    is_valid_full_name,
+    is_valid_password,
+    normalize_full_name,
+    password_requirements_message,
+)
 
 auth_bp = Blueprint("auth", __name__)
 
 EMAIL_OTP_PURPOSES = {"account registration", "account login", "password reset request", "reset"}
+
+
+def _has_pending_email_otp() -> bool:
+    return (
+        session.get("otp_flow") == "email"
+        and session.get("otp_purpose") in EMAIL_OTP_PURPOSES
+        and bool(session.get("otp_target_email"))
+    )
+
+
+def _mark_otp_pending(purpose: str, email: str, **extra) -> None:
+    session.permanent = True
+    session["otp_purpose"] = purpose
+    session["otp_target_email"] = email
+    session["otp_flow"] = "email"
+    for key, value in extra.items():
+        session[key] = value
+    session.modified = True
+
+
+def _verify_email_context(otp_error: str | None = None) -> dict:
+    return {
+        "otp_email": session.get("otp_target_email"),
+        "otp_error": otp_error,
+        "otp_expiry_minutes": OTP_EXPIRY_MINUTES,
+        "hide_auth_flashes": True,
+    }
 
 
 def _clear_otp_session() -> None:
@@ -213,6 +246,11 @@ def login():
     if request.method == "GET" and session.get("oauth_pending"):
         return redirect(url_for("auth.oauth_continue"))
 
+    if request.method == "GET":
+        if _has_pending_email_otp():
+            return redirect(url_for("auth.verify_email"))
+        return render_template("login.html")
+
     if request.method == "POST":
         action = request.form.get("action")  # 'login' or 'register'
         email = request.form.get("email", "").strip().lower()
@@ -227,11 +265,19 @@ def login():
             return render_template("login.html", active_tab=active_tab)
 
         if action == "register":
-            full_name = request.form.get("full_name", "").strip()
+            full_name = normalize_full_name(request.form.get("full_name", ""))
             confirm_password = request.form.get("confirm_password")
 
             if not full_name or not email or not password or not confirm_password:
                 flash("Please fill in all 4 registration fields.", "danger")
+                return render_template("login.html", active_tab="register")
+
+            if not is_valid_full_name(full_name):
+                flash("Please enter a valid name.", "danger")
+                return render_template("login.html", active_tab="register")
+
+            if not is_valid_password(password):
+                flash(password_requirements_message(), "danger")
                 return render_template("login.html", active_tab="register")
 
             if password != confirm_password:
@@ -248,23 +294,13 @@ def login():
             session["reg_full_name"] = full_name
             session["reg_email"] = email
             session["reg_password"] = password
+            session.permanent = True
 
-            # Send OTP for email/password registration only
+            _mark_otp_pending("account registration", email)
             otp_code = db_service.create_otp(email, "account registration")
             email_service.send_otp(email, otp_code, "account registration")
 
-            session["otp_purpose"] = "account registration"
-            session["otp_target_email"] = email
-            session["otp_flow"] = "email"
-            session.modified = True
-
-            return render_template(
-                "login.html",
-                show_otp_modal=True,
-                otp_flow="email",
-                otp_email=email,
-                hide_auth_flashes=True,
-            )
+            return redirect(url_for("auth.verify_email"))
 
         else:  # Login — direct sign-in, no OTP
             if not email or not password:
@@ -295,27 +331,39 @@ def login():
                 flash("Invalid email or password.", "danger")
                 return render_template("login.html", active_tab="login")
 
-            # Valid credentials — send login OTP for email/password sign-in only
+            _mark_otp_pending(
+                "account login",
+                email,
+                login_user_id=user.get("id"),
+                login_full_name=user.get("full_name", ""),
+            )
             otp_code = db_service.create_otp(email, "account login")
             email_service.send_otp(email, otp_code, "account login")
 
-            session["otp_purpose"] = "account login"
-            session["otp_target_email"] = email
-            session["otp_flow"] = "email"
-            session["login_user_id"] = user.get("id")
-            session["login_full_name"] = user.get("full_name", "")
-            session.modified = True
-
-            return render_template(
-                "login.html",
-                show_otp_modal=True,
-                active_tab="login",
-                otp_flow="email",
-                otp_email=email,
-                hide_auth_flashes=True,
-            )
+            return redirect(url_for("auth.verify_email"))
 
     return render_template("login.html")
+
+
+@auth_bp.route("/verify-email", methods=["GET"])
+def verify_email():
+    """Dedicated OTP page — survives refresh/back without losing session state."""
+    if not _has_pending_email_otp():
+        return redirect(url_for("auth.login"))
+    otp_error = session.pop("otp_error", None)
+    session.modified = True
+    return render_template("verify_email.html", **_verify_email_context(otp_error))
+
+
+@auth_bp.route("/cancel-verification", methods=["GET"])
+def cancel_verification():
+    """Allow user to leave OTP flow and return to sign-in."""
+    _clear_otp_session()
+    for key in ("reg_password", "reg_email", "reg_full_name", "login_user_id", "login_full_name"):
+        session.pop(key, None)
+    session.modified = True
+    flash("Verification cancelled. You can sign in or register again.", "info")
+    return redirect(url_for("auth.login"))
 
 
 # ─── OTP Verification ────────────────────────────────────────────────────────
@@ -339,15 +387,9 @@ def verify_otp():
     code = f"{digit1}{digit2}{digit3}{digit4}".strip()
 
     if len(code) != 4 or not code.isdigit():
-        return render_template(
-            "login.html",
-            show_otp_modal=True,
-            active_tab=active_tab,
-            otp_flow="email",
-            otp_email=email,
-            otp_error="Invalid code format. Please enter all 4 digits.",
-            hide_auth_flashes=True,
-        )
+        session["otp_error"] = "Invalid code format. Please enter all 4 digits."
+        session.modified = True
+        return redirect(url_for("auth.verify_email"))
 
     if not email or not purpose:
         flash("Verification session expired. Please try again.", "danger")
@@ -400,24 +442,9 @@ def verify_otp():
             session.modified = True
             return redirect(url_for("auth.reset_password"))
 
-    if purpose == "password reset request":
-        return render_template(
-            "reset.html",
-            show_otp_modal=True,
-            otp_email=email,
-            otp_error="Incorrect or expired verification code. Please try again.",
-            hide_auth_flashes=True,
-        )
-
-    return render_template(
-        "login.html",
-        show_otp_modal=True,
-        active_tab=active_tab,
-        otp_flow="email",
-        otp_email=email,
-        otp_error="Incorrect or expired verification code. Please try again.",
-        hide_auth_flashes=True,
-    )
+    session["otp_error"] = "Incorrect or expired verification code. Please try again."
+    session.modified = True
+    return redirect(url_for("auth.verify_email"))
 
 
 
@@ -438,17 +465,9 @@ def forgot_password():
         otp_code = db_service.create_otp(email, "password reset request")
         email_service.send_otp(email, otp_code, "password reset request")
 
-        session["otp_purpose"] = "password reset request"
-        session["otp_target_email"] = email
-        session["otp_flow"] = "email"
-        session.modified = True
+        _mark_otp_pending("password reset request", email)
 
-        return render_template(
-            "reset.html",
-            show_otp_modal=True,
-            otp_email=email,
-            hide_auth_flashes=True,
-        )
+        return redirect(url_for("auth.verify_email"))
 
     return render_template("reset.html")
 
@@ -471,6 +490,10 @@ def reset_password():
 
         if new_password != confirm_password:
             flash("Passwords do not match.", "danger")
+            return render_template("reset.html")
+
+        if not is_valid_password(new_password):
+            flash(password_requirements_message(), "danger")
             return render_template("reset.html")
 
         success = db_service.update_password(email, new_password)

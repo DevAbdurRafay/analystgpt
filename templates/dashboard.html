@@ -3,8 +3,21 @@
 {% block title %}Dashboard - AnalystGPT{% endblock %}
 
 {% block extra_head %}
-<!-- Plotly.js CDN -->
-<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<script>
+    window.loadPlotly = function loadPlotly() {
+        if (window.Plotly) return Promise.resolve(window.Plotly);
+        if (window.__plotlyLoadPromise) return window.__plotlyLoadPromise;
+        window.__plotlyLoadPromise = new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.plot.ly/plotly-2.35.0.min.js';
+            s.async = true;
+            s.onload = function () { resolve(window.Plotly); };
+            s.onerror = reject;
+            document.head.appendChild(s);
+        });
+        return window.__plotlyLoadPromise;
+    };
+</script>
 <style>
     /* Custom Scrollbar for Glass panels */
     ::-webkit-scrollbar {
@@ -37,7 +50,7 @@
         </div>
         <div class="flex items-center space-x-2">
             <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-cyberCyan/10 border border-cyberCyan/20 text-cyberCyan flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-cyberCyan animate-ping"></span>
+                <span class="w-2 h-2 rounded-full bg-cyberCyan"></span>
                 System Operational
             </span>
         </div>
@@ -377,8 +390,17 @@
     let chatHistory = [];            // Log of user and AI messages
 
     const DASHBOARD_STATE_KEY = 'analystgpt-dashboard-state';
+    let saveDashboardStateTimer = null;
 
     function saveDashboardState() {
+        if (saveDashboardStateTimer) clearTimeout(saveDashboardStateTimer);
+        saveDashboardStateTimer = setTimeout(function () {
+            saveDashboardStateTimer = null;
+            flushDashboardState();
+        }, 300);
+    }
+
+    function flushDashboardState() {
         const cleaningForm = document.getElementById('cleaning-form');
         const cleaningOptions = {};
         if (cleaningForm) {
@@ -506,11 +528,14 @@
         }
     });
 
-    window.addEventListener('analystgpt-theme-change', () => {
-        const last = window.__lastPlotlyChart;
-        if (last && typeof drawPlotlyChart === 'function') {
-            drawPlotlyChart(last.type, last.chartTitle, last.data, last.targetId);
-        }
+    window.addEventListener('analystgpt-theme-change', function () {
+        if (window.__plotlyThemeTimer) clearTimeout(window.__plotlyThemeTimer);
+        window.__plotlyThemeTimer = setTimeout(function () {
+            var last = window.__lastPlotlyChart;
+            if (last && typeof drawPlotlyChart === 'function') {
+                drawPlotlyChart(last.type, last.chartTitle, last.data, last.targetId);
+            }
+        }, 150);
     });
 
     // Drag and Drop triggers
@@ -1131,6 +1156,29 @@ Format your response with clear sections using **bold** headers. Be professional
     }
 
     function drawPlotlyChart(type, title, data, targetId) {
+        loadPlotly().then(function () {
+            renderPlotlyChart(type, title, data, targetId);
+        }).catch(function (err) {
+            console.warn('Plotly failed to load', err);
+        });
+    }
+
+    function captureChartSnapshot(gd_instance) {
+        if (!gd_instance || typeof Plotly === 'undefined') return;
+        var runCapture = function () {
+            Plotly.toImage(gd_instance, { format: 'png', width: 750, height: 420 }).then(function (dataUrl) {
+                activeChartImageBase64 = dataUrl;
+                flushDashboardState();
+            });
+        };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(runCapture, { timeout: 2000 });
+        } else {
+            setTimeout(runCapture, 0);
+        }
+    }
+
+    function renderPlotlyChart(type, title, data, targetId) {
         const gd = document.getElementById(targetId || 'plotly-canvas');
         const chartTitle = title || 'Data Analysis';
         if (!targetId || targetId === 'plotly-canvas') {
@@ -1255,13 +1303,10 @@ Format your response with clear sections using **bold** headers. Be professional
             delete layout.yaxis.title;
         }
 
-        Plotly.newPlot(gd, traces, layout, {responsive: true, displayModeBar: false}).then(function(gd_instance) {
-            Plotly.toImage(gd_instance, {format: 'png', width: 750, height: 420}).then(function(dataUrl) {
-                if (!targetId || targetId === 'plotly-canvas') {
-                    activeChartImageBase64 = dataUrl;
-                    saveDashboardState();
-                }
-            });
+        Plotly.newPlot(gd, traces, layout, { responsive: true, displayModeBar: false }).then(function (gd_instance) {
+            if (!targetId || targetId === 'plotly-canvas') {
+                captureChartSnapshot(gd_instance);
+            }
         });
     }
 

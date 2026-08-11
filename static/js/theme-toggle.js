@@ -1,6 +1,8 @@
 (function () {
     const STORAGE_KEY = 'analystgpt-theme';
     const THEMES = ['dark', 'light'];
+    let cursorRafId = null;
+    let pendingCursor = null;
 
     function getTheme() {
         const current = document.documentElement.getAttribute('data-theme');
@@ -27,15 +29,18 @@
             : 'fa-solid fa-sun text-sm';
     }
 
-    function updateCursorAura(theme) {
+    function updateCursorAura(theme, x, y) {
         const aura = document.getElementById('cursor-aura');
-        if (!aura || aura.dataset.x === undefined) return;
-        const x = aura.dataset.x;
-        const y = aura.dataset.y;
+        if (!aura) return;
+
+        const px = x ?? aura.dataset.x;
+        const py = y ?? aura.dataset.y;
+        if (px === undefined || py === undefined) return;
+
         if (theme === 'light') {
-            aura.style.background = `radial-gradient(700px circle at ${x}px ${y}px, rgba(6, 182, 212, 0.12), rgba(16, 185, 129, 0.08), transparent 70%)`;
+            aura.style.background = `radial-gradient(700px circle at ${px}px ${py}px, rgba(6, 182, 212, 0.12), rgba(16, 185, 129, 0.08), transparent 70%)`;
         } else {
-            aura.style.background = `radial-gradient(700px circle at ${x}px ${y}px, rgba(6, 182, 212, 0.14), rgba(16, 185, 129, 0.08), transparent 70%)`;
+            aura.style.background = `radial-gradient(700px circle at ${px}px ${py}px, rgba(6, 182, 212, 0.14), rgba(16, 185, 129, 0.08), transparent 70%)`;
         }
     }
 
@@ -54,6 +59,22 @@
         applyTheme(getTheme() === 'dark' ? 'light' : 'dark', true);
     }
 
+    function scheduleCursorUpdate(clientX, clientY) {
+        pendingCursor = { clientX, clientY };
+        if (cursorRafId) return;
+        cursorRafId = requestAnimationFrame(function () {
+            cursorRafId = null;
+            if (!pendingCursor) return;
+            const { clientX, clientY } = pendingCursor;
+            pendingCursor = null;
+            const aura = document.getElementById('cursor-aura');
+            if (!aura) return;
+            aura.dataset.x = String(clientX);
+            aura.dataset.y = String(clientY);
+            updateCursorAura(getTheme(), clientX, clientY);
+        });
+    }
+
     window.getAppTheme = getTheme;
     window.getPlotlyTheme = getPlotlyTheme;
 
@@ -67,16 +88,7 @@
         }
 
         document.addEventListener('mousemove', (e) => {
-            const aura = document.getElementById('cursor-aura');
-            if (!aura) return;
-            aura.dataset.x = String(e.clientX);
-            aura.dataset.y = String(e.clientY);
-            const theme = getTheme();
-            if (theme === 'light') {
-                aura.style.background = `radial-gradient(700px circle at ${e.clientX}px ${e.clientY}px, rgba(6, 182, 212, 0.12), rgba(16, 185, 129, 0.08), transparent 70%)`;
-            } else {
-                aura.style.background = `radial-gradient(700px circle at ${e.clientX}px ${e.clientY}px, rgba(6, 182, 212, 0.14), rgba(16, 185, 129, 0.08), transparent 70%)`;
-            }
+            scheduleCursorUpdate(e.clientX, e.clientY);
         });
     });
 })();

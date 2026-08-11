@@ -19,12 +19,12 @@
         </div>
 
         <!-- Auth Form -->
-        <form id="auth-form" action="{{ url_for('auth.login') }}" method="POST" autocomplete="off" class="space-y-3" onsubmit="return handleFormSubmit(event)">
+        <form id="auth-form" action="{{ url_for('auth.login') }}" method="POST" autocomplete="off" class="auth-form" onsubmit="return handleFormSubmit(event)">
 
             <input type="hidden" id="auth-action" name="action" value="login">
             
             <!-- Full Name Field (Register Mode Only) -->
-            <div id="full-name-group" class="space-y-1 hidden">
+            <div id="full-name-group" class="auth-field register-only hidden">
                 <label for="full_name" class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Full Name</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">
@@ -36,7 +36,7 @@
             </div>
 
             <!-- Email Input -->
-            <div class="space-y-1">
+            <div class="auth-field">
                 <label for="email" class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Email Address</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">
@@ -48,12 +48,12 @@
             </div>
 
             <!-- Password Input -->
-            <div class="space-y-1">
+            <div class="password-field-group">
                 <div class="flex items-center justify-between">
                     <label for="password" class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Password</label>
                     <a href="{{ url_for('auth.forgot_password') }}" id="forgot-password-link" class="text-[11px] font-semibold text-cyberCyan hover:underline">Forgot?</a>
                 </div>
-                <div class="relative">
+                <div class="relative password-input-wrap">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">
                         <i class="fa-solid fa-lock"></i>
                     </span>
@@ -66,10 +66,21 @@
                         </svg>
                     </button>
                 </div>
+                <div id="password-strength-wrap" class="password-strength hidden" aria-hidden="true">
+                    <div class="password-strength-steps" role="meter" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0">
+                        <span class="password-strength-step"></span>
+                        <span class="password-strength-step"></span>
+                        <span class="password-strength-step"></span>
+                        <span class="password-strength-step"></span>
+                    </div>
+                    <div class="password-strength-meta">
+                        <span id="password-strength-label" class="password-strength-label"></span>
+                    </div>
+                </div>
             </div>
 
             <!-- Confirm Password Input (Register Mode Only) -->
-            <div id="confirm-password-group" class="space-y-1 hidden">
+            <div id="confirm-password-group" class="auth-field password-field-group confirm-password-field register-only hidden">
                 <label for="confirm_password" class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Confirm Password</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">
@@ -125,69 +136,10 @@
         </div>
     </div>
 </div>
-
-<!-- 4-Digit OTP Verification Modal — email/password only (never for Google/GitHub) -->
-{% if show_otp_modal and otp_flow == 'email' %}
-<div class="otp-modal-overlay">
-    <div class="otp-modal-card">
-        
-        <div class="otp-modal-icon">
-            <i class="fa-solid fa-shield-halved"></i>
-        </div>
-
-        <h3 class="otp-modal-title">Security Verification</h3>
-        <p class="otp-modal-subtitle">
-            Enter the 4-digit code sent to
-            {% if otp_email %}<strong class="otp-modal-email">{{ otp_email }}</strong>{% else %}your email{% endif %}.
-        </p>
-        <p class="otp-modal-expiry">
-            <i class="fa-solid fa-clock"></i>
-            <span>Expires in 10 minutes</span>
-        </p>
-
-        {% if otp_error %}
-        <div class="otp-modal-alert otp-modal-alert-error" role="alert">
-            <i class="fa-solid fa-circle-exclamation"></i>
-            <span>{{ otp_error }}</span>
-        </div>
-        {% else %}
-        <div class="otp-modal-alert otp-modal-alert-info" role="status">
-            <i class="fa-solid fa-envelope"></i>
-            <span>Check your inbox and spam folder for the verification code.</span>
-        </div>
-        {% endif %}
-
-        <!-- OTP Input Form -->
-        <form action="{{ url_for('auth.verify_otp') }}" method="POST" class="otp-modal-form">
-            <div class="otp-digit-row">
-                <input type="text" name="digit1" id="d1" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="one-time-code" required class="otp-digit-input">
-                <input type="text" name="digit2" id="d2" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
-                <input type="text" name="digit3" id="d3" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
-                <input type="text" name="digit4" id="d4" maxlength="1" pattern="[0-9]" inputmode="numeric" required class="otp-digit-input">
-            </div>
-
-            <button type="submit" class="otp-modal-submit">
-                Verify &amp; Continue
-            </button>
-        </form>
-
-        <p class="otp-modal-footnote">
-            Didn't receive the code? It may take a few minutes. Also check your <strong>spam or junk folder</strong>.
-        </p>
-
-        <div class="otp-modal-resend">
-            Didn't receive code? <a href="{{ url_for('auth.login') }}">Back to sign in</a>
-        </div>
-        
-        <button type="button" class="otp-modal-close" data-go-to="{{ url_for('auth.login') }}" aria-label="Close">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-    </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/auth-validation.js') }}"></script>
 <script>
     const EYE_OPEN_SVG = `<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />`;
     const EYE_CLOSED_SVG = `<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a10.046 10.046 0 013.682-.813c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m-4.276-4.276a3 3 0 00-4.243-4.243M3 3l18 18" />`;
@@ -229,6 +181,12 @@
             confirmGroup.classList.remove('hidden');
             nameInput.required = true;
             confirmInput.required = true;
+            if (window.AuthValidation) {
+                const passInput = document.getElementById('password');
+                if (passInput) {
+                    AuthValidation.bindPasswordStrength(passInput);
+                }
+            }
             
             tabRegister.className = "w-1/2 text-center pb-2 font-outfit font-bold text-base text-white border-b-2 border-cyberCyan transition-all focus:outline-none";
             tabLogin.className = "w-1/2 text-center pb-2 font-outfit font-bold text-base text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-all focus:outline-none";
@@ -240,6 +198,13 @@
             confirmGroup.classList.add('hidden');
             nameInput.required = false;
             confirmInput.required = false;
+            if (window.AuthValidation) {
+                AuthValidation.setPasswordStrengthVisible(false);
+                const passInput = document.getElementById('password');
+                if (passInput) {
+                    AuthValidation.bindPasswordStrength(passInput);
+                }
+            }
             
             tabLogin.className = "w-1/2 text-center pb-2 font-outfit font-bold text-base text-white border-b-2 border-cyberCyan transition-all focus:outline-none";
             tabRegister.className = "w-1/2 text-center pb-2 font-outfit font-bold text-base text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-all focus:outline-none";
@@ -250,6 +215,21 @@
         const action = document.getElementById('auth-action').value;
         const pass = document.getElementById('password').value;
         const confirmPass = document.getElementById('confirm_password').value;
+        const fullName = document.getElementById('full_name')?.value || '';
+
+        if (action === 'register') {
+            if (window.AuthValidation && !AuthValidation.isValidFullName(fullName)) {
+                e.preventDefault();
+                showToast('Please enter a valid name.', 'danger');
+                return false;
+            }
+
+            if (window.AuthValidation && !AuthValidation.isValidPassword(pass)) {
+                e.preventDefault();
+                showToast('Password must include uppercase, lowercase, a number, and a special character.', 'danger');
+                return false;
+            }
+        }
 
         if (action === 'register' && pass !== confirmPass) {
             e.preventDefault();
@@ -307,18 +287,22 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Restore tab mode from localStorage (tab preference is OK to remember)
-        const savedTab = localStorage.getItem('analystgpt-auth-tab') || "{% if active_tab %}{{ active_tab }}{% else %}login{% endif %}";
+        const serverTab = "{% if active_tab %}{{ active_tab }}{% endif %}";
+        const savedTab = serverTab || localStorage.getItem('analystgpt-auth-tab') || 'login';
         switchTab(savedTab);
 
         // Ensure form fields are completely clean on every load
-        const emailEl = document.getElementById('email');
         const passEl = document.getElementById('password');
         const nameEl = document.getElementById('full_name');
-        if (emailEl) emailEl.value = '';
-        if (passEl) passEl.value = '';
-        if (nameEl) nameEl.value = '';
 
+        if (window.AuthValidation) {
+            AuthValidation.bindNameField(nameEl);
+            const passInput = document.getElementById('password');
+            AuthValidation.bindPasswordStrength(passInput);
+            if (savedTab !== 'register') {
+                AuthValidation.setPasswordStrengthVisible(false);
+            }
+        }
 
         document.querySelectorAll('[data-go-to]').forEach((button) => {
             button.addEventListener('click', () => {

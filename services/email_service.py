@@ -4,6 +4,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 
+from services.supabase_service import OTP_EXPIRY_MINUTES
+
 load_dotenv()
 
 # Read MAIL_* credentials from .env (with legacy SMTP_* fallbacks for compatibility)
@@ -61,7 +63,7 @@ def _build_html_email(code: str, purpose: str) -> str:
               </h2>
               <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;line-height:1.6;">
                 Use the 4-digit security code below to complete your <strong style="color:#f1f5f9;">{purpose}</strong>.
-                This code will expire in <strong style="color:#06B6D4;">10 minutes</strong>.
+                This code will expire in <strong style="color:#06B6D4;">{OTP_EXPIRY_MINUTES} minutes</strong>.
               </p>
 
               <!-- OTP 4-Digit Row Container (Strict Single Row) -->
@@ -106,7 +108,7 @@ class EmailService:
         plain_body = (
             f"Hello,\n\n"
             f"Your 4-digit security verification code is: {code}\n\n"
-            f"This code was generated for {purpose}. It expires in 10 minutes.\n"
+            f"This code was generated for {purpose}. It expires in {OTP_EXPIRY_MINUTES} minutes.\n"
             f"If you did not request this code, please safely ignore this email.\n\n"
             f"This is an automated message from AnalystGPT — please do not reply.\n\n"
             f"Best regards,\nAnalystGPT"

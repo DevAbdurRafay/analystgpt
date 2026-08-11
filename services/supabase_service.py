@@ -10,6 +10,8 @@ import psycopg2.extras
 
 load_dotenv()
 
+OTP_EXPIRY_MINUTES = 2
+
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY", "")
 
@@ -248,7 +250,7 @@ class DBService:
         email = email.lower().strip()
         code = f"{random.randint(1000, 9999)}"
         now = datetime.datetime.now(datetime.timezone.utc)
-        expires_at = now + datetime.timedelta(minutes=10)
+        expires_at = now + datetime.timedelta(minutes=OTP_EXPIRY_MINUTES)
 
         conn = self.get_db_conn()
         if conn:

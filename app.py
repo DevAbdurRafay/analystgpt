@@ -110,11 +110,14 @@ def create_app():
 
     # ─── Auth-Guarded Top-Level Routes ───────────────────────────────────────
     @app.after_request
-    def disable_cache(response):
-        """Prevents browser disk cache from serving stale login/auth pages."""
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+    def configure_cache(response):
+        """Cache static assets aggressively; keep HTML/auth responses fresh."""
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         return response
 
     @app.before_request

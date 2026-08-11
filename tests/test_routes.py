@@ -6,6 +6,7 @@ import pandas as pd
 from app import create_app
 from services.data_cleaner import DataCleaner
 from services.groq_service import GroqService
+from services.validators import is_valid_full_name, is_valid_password, password_strength_score
 
 
 class RouteAccessTests(unittest.TestCase):
@@ -178,6 +179,32 @@ class RouteAccessTests(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertIn("duplicate", result["answer"].lower())
         self.assertEqual(result["chart_data"]["values"][1], 1)
+
+    def test_full_name_accepts_letters_only(self):
+        self.assertTrue(is_valid_full_name("Ali Khan"))
+        self.assertFalse(is_valid_full_name("Ali123"))
+        self.assertFalse(is_valid_full_name("Ali@Khan"))
+        self.assertFalse(is_valid_full_name("A"))
+
+    def test_password_strength_rules(self):
+        self.assertEqual(password_strength_score("abc"), 1)
+        self.assertEqual(password_strength_score("Abc"), 2)
+        self.assertEqual(password_strength_score("Abc!"), 3)
+        self.assertEqual(password_strength_score("R@fay"), 3)
+        self.assertEqual(password_strength_score("Abc1!"), 4)
+        self.assertTrue(is_valid_password("SecurePass1!"))
+        self.assertFalse(is_valid_password("R@fay"))
+        self.assertFalse(is_valid_password("password"))
+        self.assertFalse(is_valid_password("PASSWORD1!"))
+
+    def test_pending_otp_redirects_to_verify_email_on_refresh(self):
+        with self.client.session_transaction() as sess:
+            sess["otp_purpose"] = "account login"
+            sess["otp_target_email"] = "user@example.com"
+            sess["otp_flow"] = "email"
+        response = self.client.get("/login", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/verify-email", response.headers.get("Location", ""))
 
 
 if __name__ == "__main__":

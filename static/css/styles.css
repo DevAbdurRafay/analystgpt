@@ -76,7 +76,6 @@
 .theme-body {
     background-color: var(--app-bg);
     color: var(--app-text);
-    transition: background-color 0.45s ease, color 0.45s ease;
 }
 
 .theme-body ::selection {
@@ -133,6 +132,7 @@
     z-index: 0;
     overflow: hidden;
     pointer-events: none;
+    contain: strict;
 }
 
 .app-bg-mesh {
@@ -204,6 +204,7 @@
     opacity: 0.65;
     transition: opacity 0.4s ease;
     background: radial-gradient(650px circle at 50% 50%, rgba(6, 182, 212, 0.12), rgba(16, 185, 129, 0.08), transparent 70%);
+    will-change: background;
 }
 
 @keyframes meshDrift {
@@ -240,7 +241,8 @@
     .app-bg-mesh,
     .app-bg-grid,
     .app-bg-orb,
-    .app-bg-shimmer {
+    .app-bg-shimmer,
+    .app-bg-cursor {
         animation: none !important;
     }
 }
@@ -278,13 +280,10 @@ select.custom-dropdown-native {
 
 /* Glassmorphism Card Utility */
 .glass-card {
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     background: var(--glass-card-bg);
     border: 1px solid var(--app-border);
     border-radius: 1.5rem;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
@@ -319,7 +318,6 @@ th {
     top: 0;
     z-index: 10;
     background-color: var(--table-head-bg) !important;
-    backdrop-filter: blur(12px);
     color: var(--app-text-strong) !important;
 }
 
@@ -460,8 +458,6 @@ tr:last-child td:last-child {
 
 /* Toast override for Dark Glass */
 .toast {
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 ::-webkit-scrollbar {
@@ -888,12 +884,14 @@ select:-webkit-autofill:focus {
 .otp-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: 9999;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     padding: 1rem;
-    padding-top: clamp(9rem, 34vh, 18rem);
+    padding-top: max(1rem, env(safe-area-inset-top, 0px));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
     background: var(--otp-overlay-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -903,6 +901,9 @@ select:-webkit-autofill:focus {
     position: relative;
     width: 100%;
     max-width: 380px;
+    margin: auto;
+    max-height: min(92vh, 640px);
+    overflow-y: auto;
     padding: 1.5rem 1.375rem 1.25rem;
     border-radius: 1.25rem;
     background: var(--otp-card-bg);
@@ -1072,12 +1073,230 @@ select:-webkit-autofill:focus {
 
 @media (max-width: 480px) {
     .otp-modal-overlay {
-        padding-top: clamp(7rem, 28vh, 12rem);
+        padding: 0.75rem;
+    }
+
+    .otp-modal-card {
+        max-width: 100%;
+        border-radius: 1rem;
     }
 
     .otp-digit-input {
         width: 2.625rem;
         height: 3.125rem;
         font-size: 1.25rem;
+    }
+}
+
+/* ─── Auth form spacing ─────────────────────────────────────────────────── */
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.auth-form > .auth-field,
+.auth-form > .password-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.auth-form .register-only.hidden,
+.auth-form .password-strength.hidden {
+    display: none !important;
+}
+
+.password-field-group .password-input-wrap {
+    margin-bottom: 0;
+}
+
+.password-strength {
+    margin-top: 0.75rem;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.password-strength-meta {
+    min-height: 0.625rem;
+    margin-top: 0;
+}
+
+.confirm-password-field {
+    margin-top: 0;
+}
+
+.auth-form .password-field-group + .confirm-password-field {
+    margin-top: -0.125rem;
+}
+
+/* ─── Verify email page ─────────────────────────────────────────────────── */
+.verify-email-page {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 120px);
+    padding: 1.5rem 1rem;
+}
+
+.verify-email-card {
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="light"] .verify-email-card {
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+}
+
+/* ─── Password strength meter (4-step segmented) ──────────────────────── */
+.password-strength-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.3125rem;
+    width: 100%;
+}
+
+.password-strength-step {
+    display: block;
+    height: 0.3125rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.22);
+    transition: background-color 0.28s ease, box-shadow 0.28s ease, transform 0.2s ease;
+}
+
+[data-theme="light"] .password-strength-step {
+    background: rgba(100, 116, 139, 0.18);
+}
+
+.password-strength-step.active {
+    transform: scaleY(1.15);
+}
+
+.password-strength-step.active.step-weak {
+    background: linear-gradient(90deg, #fb923c, #f97316);
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.35);
+}
+
+.password-strength-step.active.step-fair {
+    background: linear-gradient(90deg, #facc15, #eab308);
+    box-shadow: 0 0 10px rgba(234, 179, 8, 0.3);
+}
+
+.password-strength-step.active.step-strong {
+    background: linear-gradient(90deg, #4ade80, #22c55e);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+}
+
+.password-strength-meta {
+    display: flex;
+    justify-content: flex-end;
+    min-height: 0.875rem;
+}
+
+.password-strength-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 0.25s ease, transform 0.25s ease, color 0.25s ease;
+}
+
+.password-strength-label.level-weak {
+    opacity: 1;
+    transform: translateY(0);
+    color: #fb923c;
+}
+
+.password-strength-label.level-fair {
+    opacity: 1;
+    transform: translateY(0);
+    color: #facc15;
+}
+
+.password-strength-label.level-strong {
+    opacity: 1;
+    transform: translateY(0);
+    color: #4ade80;
+}
+
+[data-theme="light"] .password-strength-label.level-weak {
+    color: #ea580c;
+}
+
+[data-theme="light"] .password-strength-label.level-fair {
+    color: #ca8a04;
+}
+
+[data-theme="light"] .password-strength-label.level-strong {
+    color: #16a34a;
+}
+
+.password-strength.level-weak .password-strength-step:nth-child(1).active {
+    animation: strengthPulse 0.35s ease;
+}
+
+.password-strength.level-fair .password-strength-step:nth-child(3).active {
+    animation: strengthPulse 0.35s ease;
+}
+
+.password-strength.level-strong .password-strength-step:nth-child(4).active {
+    animation: strengthPulse 0.35s ease;
+}
+
+@keyframes strengthPulse {
+    0% { transform: scaleY(1); }
+    50% { transform: scaleY(1.35); }
+    100% { transform: scaleY(1.15); }
+}
+
+/* ─── Performance: fast surfaces (no GPU blur) ─────────────────────────── */
+.backdrop-blur-xl,
+.backdrop-blur-2xl,
+.backdrop-blur-md {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.backdrop-blur-xl {
+    background-color: var(--glass-card-bg) !important;
+}
+
+.backdrop-blur-2xl {
+    background-color: rgba(9, 13, 22, 0.9) !important;
+}
+
+[data-theme="light"] .backdrop-blur-2xl {
+    background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.theme-nav.backdrop-blur-xl {
+    background: var(--nav-bg) !important;
+}
+
+#diagnostics-card,
+#cleaning-card,
+#chart-card,
+#export-report-card,
+.upload-hero-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 320px;
+}
+
+.animate-ping {
+    animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
     }
 }
