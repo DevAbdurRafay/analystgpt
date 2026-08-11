@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "installCommand": "pip install -r requirements-vercel.txt",
   "builds": [
     {
       "src": "api/index.py",
@@ -11,5 +12,11 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
 }
