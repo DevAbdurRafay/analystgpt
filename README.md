@@ -1,5 +1,5 @@
 <h1 align="center">AnalystGPT — AI-Powered Data Analysis Workbench</h1>
-<p align="center"><strong>AnalystGPT</strong> is a premium, web-based <strong>AI-Powered Data Analysis Assistant</strong> built using <strong>Python Flask</strong>, <strong>Plotly.js</strong>, <strong>Tailwind CSS</strong>, <strong>Bootstrap 5</strong>, and the <strong>Groq Inference Engine</strong>. The application operates in a secure, responsive <strong>Dark Glassmorphism UI</strong> environment, letting users upload a dataset and chat with an AI copilot to instantly generate insights, charts, and reports.</p>
+<p align="center"><strong>AnalystGPT</strong> is a premium, web-based <strong>AI-Powered Data Analysis Assistant</strong> built using <strong>Python Flask</strong>, <strong>Matplotlib/Seaborn</strong>, <strong>Tailwind CSS</strong>, <strong>Bootstrap 5</strong>, and the <strong>Groq Inference Engine</strong>. The application operates in a secure, responsive <strong>Dark Glassmorphism UI</strong> environment, letting users upload a dataset and chat with an AI copilot to instantly generate insights, charts, and reports.</p>
 
 <h2>🚀 Key Features</h2>
 
@@ -19,7 +19,7 @@
 
 <h3>📈 Data Visualizations</h3>
 <ul>
-  <li>Generates Bar, Line, Pie, Donut, Scatter, Histogram, Area, and Correlation Heatmap charts dynamically based on your prompt.</li>
+  <li>Generates Bar, Line, Pie, Scatter, and Histogram charts dynamically based on your prompt, rendered server-side with Matplotlib/Seaborn.</li>
   <li>Every chart includes clearly labeled axes, titles, and multi-color palettes readable against the dark theme.</li>
   <li>Users can manually override recommended chart types via a custom-styled dropdown selector.</li>
 </ul>
@@ -43,7 +43,7 @@
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Groq-F55036?style=for-the-badge&logo=groq&logoColor=white" alt="Groq" />
   <img src="https://img.shields.io/badge/Google_Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini" />
-  <img src="https://img.shields.io/badge/Plotly-3F4F75?style=for-the-badge&logo=plotly&logoColor=white" alt="Plotly" />
+  <img src="https://img.shields.io/badge/Matplotlib-11557C?style=for-the-badge&logo=python&logoColor=white" alt="Matplotlib" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
   <img src="https://img.shields.io/badge/Bootstrap-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white" alt="Bootstrap" />
   <img src="https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white" alt="HTML5" />
@@ -54,7 +54,7 @@
 <ul>
   <li><strong>Backend:</strong> Python Flask (Application Factories & Blueprint Routing)</li>
   <li><strong>Frontend Styling:</strong> Bootstrap 5 + Tailwind CSS (Curated Dark HSL Palette & blur-based Glassmorphism)</li>
-  <li><strong>Visuals:</strong> Plotly.js CDN + Matplotlib/Seaborn (server-rendered charts)</li>
+  <li><strong>Visuals:</strong> Matplotlib/Seaborn (server-rendered charts embedded as images)</li>
   <li><strong>Database & Auth Integration:</strong> Supabase (PostgreSQL via Client Wrapper + Session Pooler)</li>
   <li><strong>AI Engine:</strong> Groq API (primary) with Google Gemini API (automatic fallback)</li>
 </ul>
